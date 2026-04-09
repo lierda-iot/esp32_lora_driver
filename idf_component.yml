@@ -1,4 +1,4 @@
 version: "0.0.1"
-description: "A simple example component"
+description: "ESP-IDF component library for Semtech LR20xx/LR2021 radios, exposing RAC, RALF, and RAL layers with ESP platform integration."
 url: "https://github.com/<user>/<repo>"
-license: "MIT"
+license: "BSD-3-Clause-Clear"
