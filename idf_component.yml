@@ -1,0 +1,4 @@
+version: "0.0.1"
+description: "A simple example component"
+url: "https://github.com/<user>/<repo>"
+license: "MIT"
