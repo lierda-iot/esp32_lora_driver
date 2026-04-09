@@ -1,0 +1,36 @@
+LiotLr2021 licensing notice
+
+This project is based on, modified from, and/or ported from Semtech source
+code, especially code from the `smtc_rac_lib` component in the upstream SDK.
+
+Primary license
+
+This repository is distributed under The Clear BSD License. See `LICENSE`.
+
+Upstream attribution
+
+Original source code and substantial derived portions are from Semtech
+Corporation and remain subject to the original copyright notices and license
+terms included in the source files and in the upstream distribution.
+
+Redistribution requirements
+
+When redistributing source code derived from the upstream Semtech code, retain
+the original copyright notices, license conditions, and disclaimer text.
+
+When redistributing binaries, reproduce the applicable copyright notices,
+license conditions, and disclaimer text in the documentation and/or other
+materials provided with the distribution.
+
+Third-party components
+
+If this project includes files copied from upstream third-party components,
+those files may be subject to additional license terms from their respective
+authors. Keep the corresponding license notices when redistributing them.
+
+Project-specific changes
+
+Porting, integration, and project-specific modifications may include additional
+copyright notices from this project's maintainers in individual files.
+Those additions do not remove or replace the upstream license obligations for
+derived files.
