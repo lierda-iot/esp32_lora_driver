@@ -23,6 +23,38 @@ config LIOT_GPIO_RANGE_MAX
     int
     default 48
 
+menu "Logging"
+
+choice SMTC_RAC_LOG_PROFILE
+    prompt "RAC business log profile"
+    default SMTC_RAC_LOG_MINIMAL
+    help
+        Select the built-in RAC business log profile.
+
+config SMTC_RAC_LOG_OFF
+    bool "OFF"
+    help
+        Disable FSK, LoRa, and LR-FHSS RAC business logs.
+
+config SMTC_RAC_LOG_MINIMAL
+    bool "MINIMAL"
+    help
+        Enable only LoRa RAC business logs.
+
+config SMTC_RAC_LOG_VERBOSE
+    bool "VERBOSE"
+    help
+        Enable FSK, LoRa, and LR-FHSS RAC business logs.
+
+config SMTC_RAC_LOG_ALL
+    bool "ALL"
+    help
+        Currently equivalent to VERBOSE.
+
+endchoice
+
+endmenu
+
 if SMTC_RADIO_LR20XX
 
 choice LIERDA_LR20XX_BOARD
@@ -56,10 +88,9 @@ config LR2021_RADIO_SPI_ID
         general-purpose SPI host.
 
 config LR2021_NRST_GPIO
-    int "LR2021 NRST GPIO number"
+    int "LR2021 NRST GPIO number" if LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     default 38 if LIERDA_BOARD_LRMAM36_FANN4
     default 38
-    depends on LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     range LIOT_GPIO_RANGE_MIN LIOT_GPIO_RANGE_MAX
     help
         GPIO number used as external reset (NRST) signal.
@@ -69,10 +100,9 @@ config LR2021_NRST_GPIO
         Set to -1 if NRST is not connected.
 
 config LR2021_BUSY_GPIO
-    int "LR2021 BUSY GPIO number"
+    int "LR2021 BUSY GPIO number" if LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     default 17 if LIERDA_BOARD_LRMAM36_FANN4
     default 17
-    depends on LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     range LIOT_GPIO_RANGE_MIN LIOT_GPIO_RANGE_MAX
     help
         GPIO number connected to the BUSY pin of the LR2021 radio.
@@ -80,10 +110,9 @@ config LR2021_BUSY_GPIO
         be configured as an input pin.
 
 config LR2021_NSS_GPIO
-    int "LR2021 NSS GPIO number"
+    int "LR2021 NSS GPIO number" if LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     default 39 if LIERDA_BOARD_LRMAM36_FANN4
     default 39
-    depends on LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     range LIOT_GPIO_RANGE_MIN LIOT_GPIO_RANGE_MAX
     help
         GPIO number used as NSS (chip select) for the LR2021 radio.
@@ -91,40 +120,36 @@ config LR2021_NSS_GPIO
         configured as an output pin.
 
 config LR2021_SPI_MOSI
-    int "LR2021 SPI MOSI GPIO"
+    int "LR2021 SPI MOSI GPIO" if LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     default 41 if LIERDA_BOARD_LRMAM36_FANN4
     default 41
-    depends on LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     range LIOT_GPIO_RANGE_MIN LIOT_GPIO_RANGE_MAX
     help
         GPIO number used for LR2021 SPI MOSI signal.
 
 config LR2021_SPI_MISO
-    int "LR2021 SPI MISO GPIO"
+    int "LR2021 SPI MISO GPIO" if LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     default 42 if LIERDA_BOARD_LRMAM36_FANN4
     default 42
-    depends on LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     range LIOT_GPIO_RANGE_MIN LIOT_GPIO_RANGE_MAX
     help
         GPIO number used for LR2021 SPI MISO signal.
 
 config LR2021_SPI_CLK
-    int "LR2021 SPI SCLK GPIO"
+    int "LR2021 SPI SCLK GPIO" if LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     default 40 if LIERDA_BOARD_LRMAM36_FANN4
     default 40
-    depends on LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     range LIOT_GPIO_RANGE_MIN LIOT_GPIO_RANGE_MAX
     help
         GPIO number used for LR2021 SPI clock signal.
 
 menu "LR20XX DIO Configuration"
-    depends on LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
+    visible if LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
 
 config LR20XX_DIO7_GPIO
-    int "LR20XX DIO7 GPIO number"
+    int "LR20XX DIO7 GPIO number" if LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     default 21 if LIERDA_BOARD_LRMAM36_FANN4
     default 21
-    depends on LIERDA_BOARD_LRMWP35_FANN4 || LIERDA_BOARD_GENERIC
     range LIOT_GPIO_RANGE_MIN LIOT_GPIO_RANGE_MAX
     help
         GPIO number connected to LR20XX DIO7 pin.

@@ -38,6 +38,8 @@
  * --- DEPENDENCIES ------------------------------------------------------------
  */
 
+#include "sdkconfig.h"
+
 #if !CONFIG_LIERDA_BOARD_LRMWP35_FANN4
 #error "ral_lr20xx_bsp_lrmwp35_fann4.c requires CONFIG_LIERDA_BOARD_LRMWP35_FANN4"
 #endif
