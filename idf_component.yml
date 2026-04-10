@@ -1,4 +1,18 @@
-version: "0.0.1"
-description: "ESP-IDF component library for Semtech LR20xx/LR2021 radios, exposing RAC, RALF, and RAL layers with ESP platform integration."
-url: "https://github.com/<user>/<repo>"
+version: "0.0.2"
+description: "ESP-IDF component library for Semtech LoRa radios, currently targeting LR20xx/LR2021, with ESP platform integration and public RAC, RALF, and RAL layers; planned to expand with SX126x and LR11xx support."
+url: "https://github.com/lierda-iot/esp32_lora_driver.git"
+repository: "https://github.com/lierda-iot/esp32_lora_driver.git"
+issues: "https://github.com/lierda-iot/esp32_lora_driver/issues"
+documentation: "https://alidocs.dingtalk.com/i/nodes/dxXB52LJqnGE6GN4cQRNK0PX8qjMp697?utm_scene=team_space"
 license: "BSD-3-Clause-Clear"
+tags:
+  - lora
+  - lr2021
+  - lr20xx
+  - radio
+  - esp-idf
+  - lierda
+dependencies:
+  idf: ">=5.0"
+files:
+  use_gitignore: true

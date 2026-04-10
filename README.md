@@ -1,6 +1,8 @@
-# LiotLr2021
+# ESP LoRa Driver
 
-`LiotLr2021` 是一个面向 ESP-IDF 的无线收发组件，用于集成 Semtech 系列射频芯片，当前以 `LR20xx/LR2021` 为主要目标，同时保留了 `SX126x` 和 `LR11xx` 的分层适配结构。
+仓库地址：<https://github.com/lierda-iot/esp32_lora_driver.git>
+
+`ESP LoRa Driver` 是一个面向 Semtech LoRa 无线芯片的 ESP-IDF 组件库，当前以 `LR20xx/LR2021` 为主要目标，集成了 ESP 平台适配，并对外公开 `RAC`、`RALF` 和 `RAL` 分层接口，后续将继续支持 `SX126x`、`LR11xx` 等芯片型号。
 
 该组件基于 Semtech 上游 `smtc_rac_lib` 修改、裁剪并移植到 ESP-IDF 环境，保留了上游的分层抽象方式，并增加了适用于 ESP 平台的 HAL、GPIO、SPI、定时器和日志适配。
 
@@ -47,7 +49,7 @@
 
 当前组件采用单入口对外方式，外部用户只需要包含一个头文件：
 
-- [include/LiotLr2021.h](/home/cheny/code_temp/Lora/LiotLr2021/include/LiotLr2021.h)
+- [include/LiotLr2021.h](include/LiotLr2021.h)
 
 也就是说，推荐的接入方式是：
 
@@ -58,16 +60,16 @@
 `LiotLr2021.h` 本身会聚合以下几层公共接口：
 
 - `RAC API`
-  - 来自 [smtc_rac_api.h](/home/cheny/code_temp/Lora/LiotLr2021/rac_api/smtc_rac_api.h)
+  - 来自 [smtc_rac_api.h](rac_api/smtc_rac_api.h)
   - 适合应用层直接发起无线事务、管理调度上下文和使用统一 API
 - `RAC`
-  - 来自 [smtc_rac.h](/home/cheny/code_temp/Lora/LiotLr2021/rac/smtc_rac.h)
+  - 来自 [smtc_rac.h](rac/smtc_rac.h)
   - 适合需要直接操作无线访问控制层的场景
 - `RALF`
-  - 来自 [ralf.h](/home/cheny/code_temp/Lora/LiotLr2021/ralf/ralf.h)
+  - 来自 [ralf.h](ralf/ralf.h)
   - 适合需要使用射频功能层接口的场景
 - `RAL`
-  - 来自 [ral.h](/home/cheny/code_temp/Lora/LiotLr2021/ral/ral.h)
+  - 来自 [ral.h](ral/ral.h)
   - 适合需要最底层射频抽象接口的场景
 
 因此，虽然用户只需要包含一个入口头文件，但仍然可以根据自己对组件分层的理解，直接调用不同层的接口类型和函数。
@@ -106,7 +108,7 @@
 
 ## 配置方式
 
-组件通过 [Kconfig](/home/cheny/code_temp/Lora/LiotLr2021/Kconfig) 暴露配置项，主要包括：
+组件通过 [Kconfig](Kconfig) 暴露配置项，主要包括：
 
 - 射频芯片家族选择
   - `SX126x`
@@ -117,6 +119,188 @@
 - `L-LRMWP35-FANN4` 或 `Generic / Custom LR2021 SPI board` 下的 `LR20xx` 相关 `DIO` 配置
 
 当前默认目标为 `LR20xx`，适合作为 `LR2021` 的默认配置基础。
+
+## 日志输出说明
+
+当前组件内的日志主要分为三类：
+
+- `RAC Core` 日志
+  - 位于 [smtc_rac.c](rac/smtc_rac.c)
+  - 主要用于 `RAC` 初始化、上下文设置、调度流程和接口调用跟踪
+- `RAC 业务日志`
+  - 主要位于 `LoRa`、`FLRC`、`LR-FHSS` 等 `RAC` 业务文件
+  - 使用统一的 [smtc_rac_log.h](rac_api/smtc_rac_log.h) 宏输出
+- `ESP_LOG` 日志
+  - 主要位于 `LR20xx RAL / RALF` 和 `modem_hal`
+  - 使用 `ESP_LOGI`、`ESP_LOGD`、`ESP_LOGE` 输出
+
+### 1. RAC Core 日志
+
+`RAC Core` 使用以下宏：
+
+- `RAC_CORE_LOG_ERROR`
+- `RAC_CORE_LOG_CONFIG`
+- `RAC_CORE_LOG_INFO`
+- `RAC_CORE_LOG_WARN`
+- `RAC_CORE_LOG_DEBUG`
+- `RAC_CORE_LOG_API`
+- `RAC_CORE_LOG_RADIO`
+
+当前默认行为见 [smtc_rac.c](rac/smtc_rac.c#L82)：
+
+- 默认开启：`ERROR`、`CONFIG`
+- 默认关闭：`INFO`、`WARN`、`DEBUG`、`API`、`RADIO`
+
+如果只是临时调试，最直接的方式是修改 [smtc_rac.c](rac/smtc_rac.c#L82) 中这些默认宏值，例如：
+
+```c
+#define RAC_CORE_LOG_INFO_ENABLE 1
+#define RAC_CORE_LOG_WARN_ENABLE 1
+#define RAC_CORE_LOG_DEBUG_ENABLE 1
+#define RAC_CORE_LOG_API_ENABLE 1
+#define RAC_CORE_LOG_RADIO_ENABLE 1
+```
+
+这种方式适合本地快速打开或关闭 `RAC Core` 日志。
+
+如果希望在不改源码的情况下控制日志，也可以通过编译宏覆盖，例如：
+
+```cmake
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    RAC_CORE_LOG_INFO_ENABLE=1
+    RAC_CORE_LOG_WARN_ENABLE=1
+    RAC_CORE_LOG_DEBUG_ENABLE=1
+    RAC_CORE_LOG_API_ENABLE=1
+    RAC_CORE_LOG_RADIO_ENABLE=1
+)
+```
+
+如果想关闭某一类日志，可将对应宏设为 `0`。编译宏会覆盖源码里的默认值。
+
+### 2. RAC 业务日志
+
+`LoRa`、`FLRC`、`LR-FHSS` 路径使用 [smtc_rac_log.h](rac_api/smtc_rac_log.h) 中的统一日志宏：
+
+- `RAC_LOG_ERROR`
+- `RAC_LOG_WARN`
+- `RAC_LOG_INFO`
+- `RAC_LOG_DEBUG`
+- `RAC_LOG_CONFIG`
+- `RAC_LOG_TX`
+- `RAC_LOG_RX`
+- `RAC_LOG_STATS`
+- `RAC_LOG_HEX_DUMP`
+- `RAC_LOG_BANNER`
+- `RAC_LOG_SIMPLE_BANNER`
+
+日志输出格式大致如下：
+
+```text
+[RAC-LORA-INFO ] [    1234 ms] setup ok
+```
+
+其中：
+
+- 前缀如 `RAC-LORA`、`RAC-FLRC`、`RAC-LRFHSS` 用于区分业务模块
+- 时间戳来自 `smtc_modem_hal_get_time_in_ms()`
+- 最终输出通过 `SMTC_MODEM_HAL_TRACE_PRINTF(...)` 进入 `smtc_modem_hal_print_trace(...)`
+
+当前组件在 [CMakeLists.txt](CMakeLists.txt#L222) 中预留了以下日志 profile：
+
+- `OFF`
+  - 关闭 `FSK`、`LoRa`、`LR-FHSS` 业务日志
+- `MINIMAL`
+  - 仅开启 `LoRa` 业务日志
+- `VERBOSE`
+  - 开启 `FSK`、`LoRa`、`LR-FHSS` 业务日志
+- `ALL`
+  - 当前实现与 `VERBOSE` 等效
+
+这些 profile 现在已经通过 `Kconfig` 暴露，可直接在 `menuconfig` 中选择：
+
+```text
+Liot LR2021 (IDF)
+  -> Logging
+    -> RAC business log profile
+```
+
+如果你希望手动控制这几类日志，可通过编译宏覆盖，例如：
+
+```cmake
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    RAC_FSK_LOG_ENABLE=1
+    RAC_LORA_LOG_ENABLE=1
+    RAC_LRFHSS_LOG_ENABLE=1
+)
+```
+
+### 3. Trace 后端开关
+
+`RAC` 日志最终依赖 [smtc_modem_hal_dbg_trace.h](modem_hal/smtc_modem_hal_dbg_trace.h) 中的 trace 宏。
+
+当前默认值为：
+
+- `MODEM_HAL_DBG_TRACE=ON`
+- `MODEM_HAL_DBG_TRACE_COLOR=ON`
+- `MODEM_HAL_DBG_TRACE_RP=OFF`
+- `MODEM_HAL_DEEP_DBG_TRACE=OFF`
+
+如需关闭 `RAC` 类 trace 输出，可在编译时设置：
+
+```cmake
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    MODEM_HAL_DBG_TRACE=0
+)
+```
+
+如需关闭颜色输出，可设置：
+
+```cmake
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    MODEM_HAL_DBG_TRACE_COLOR=0
+)
+```
+
+### 4. ESP_LOG 日志
+
+组件中还有一部分日志直接使用 `ESP-IDF` 的 `ESP_LOGx`：
+
+- [ralf_lr20xx.c](ralf/lr20xx_ralf/ralf_lr20xx.c)
+  - 主要输出 `LR20xx` 的 `setup GFSK / LoRa / FLRC / CAD` 信息
+- [ral_lr20xx.c](ral/lr20xx_ral/ral_lr20xx.c)
+  - 主要输出部分 `PA` 和发射配置调试信息
+- [smtc_modem_hal.c](modem_hal/smtc_modem_hal.c)
+  - 主要输出 `panic` 和部分 `HAL` 运行信息
+
+这部分日志不受 `RAC_LOG_*` 宏控制，而是受 `ESP-IDF` 自身日志等级控制。
+
+常见控制方式包括：
+
+1. 在 `menuconfig` 中调整默认日志等级
+2. 在运行时调用 `esp_log_level_set("*", ESP_LOG_INFO);`
+3. 针对特定 tag 调用 `esp_log_level_set("SMTC_MODEM", ESP_LOG_DEBUG);`
+
+### 5. 应用层如何使用
+
+如果你的应用希望直接复用组件自带的 `RAC` 风格日志，可显式包含：
+
+- [smtc_rac_log.h](rac_api/smtc_rac_log.h)
+
+示例：
+
+```c
+#include "smtc_rac_log.h"
+
+void app_main(void)
+{
+    RAC_LOG_SIMPLE_BANNER("LR2021 demo");
+    RAC_LOG_INFO("radio init start");
+    RAC_LOG_CONFIG("freq=%u", 470300000U);
+    RAC_LOG_TX("tx len=%u", 16U);
+}
+```
+
+如果你的应用只想使用 `ESP-IDF` 原生日志，则直接使用 `ESP_LOGI`、`ESP_LOGW`、`ESP_LOGE` 即可，不必依赖 `RAC_LOG_*` 宏。
 
 ## 默认硬件配置
 
@@ -138,9 +322,9 @@
 
 当前板型与 BSP 对应关系如下：
 
-- `L-LRMAM36-FANN4` -> [ral_lr20xx_bsp_lrmam36_fann4.c](/home/cheny/code_temp/Lora/LiotLr2021/ral/lr20xx_ral/ral_lr20xx_bsp_lrmam36_fann4.c)
-- `L-LRMWP35-FANN4` -> [ral_lr20xx_bsp_lrmwp35_fann4.c](/home/cheny/code_temp/Lora/LiotLr2021/ral/lr20xx_ral/ral_lr20xx_bsp_lrmwp35_fann4.c)
-- `Generic / Custom LR2021 SPI board` -> [ral_lr20xx_bsp.c](/home/cheny/code_temp/Lora/LiotLr2021/ral/lr20xx_ral/ral_lr20xx_bsp.c)
+- `L-LRMAM36-FANN4` -> [ral_lr20xx_bsp_lrmam36_fann4.c](ral/lr20xx_ral/ral_lr20xx_bsp_lrmam36_fann4.c)
+- `L-LRMWP35-FANN4` -> [ral_lr20xx_bsp_lrmwp35_fann4.c](ral/lr20xx_ral/ral_lr20xx_bsp_lrmwp35_fann4.c)
+- `Generic / Custom LR2021 SPI board` -> [ral_lr20xx_bsp.c](ral/lr20xx_ral/ral_lr20xx_bsp.c)
 
 ## 自定义硬件适配说明
 
@@ -151,9 +335,9 @@
 
 当前 `LR20XX` 路径下的晶振相关配置由板型 BSP 决定：
 
-- `L-LRMAM36-FANN4`：见 [ral_lr20xx_bsp_lrmam36_fann4.c](/home/cheny/code_temp/Lora/LiotLr2021/ral/lr20xx_ral/ral_lr20xx_bsp_lrmam36_fann4.c#L484)
-- `L-LRMWP35-FANN4`：见 [ral_lr20xx_bsp_lrmwp35_fann4.c](/home/cheny/code_temp/Lora/LiotLr2021/ral/lr20xx_ral/ral_lr20xx_bsp_lrmwp35_fann4.c#L484)
-- `Generic / Custom LR2021 SPI board`：见 [ral_lr20xx_bsp.c](/home/cheny/code_temp/Lora/LiotLr2021/ral/lr20xx_ral/ral_lr20xx_bsp.c#L484)
+- `L-LRMAM36-FANN4`：见 [ral_lr20xx_bsp_lrmam36_fann4.c](ral/lr20xx_ral/ral_lr20xx_bsp_lrmam36_fann4.c#L484)
+- `L-LRMWP35-FANN4`：见 [ral_lr20xx_bsp_lrmwp35_fann4.c](ral/lr20xx_ral/ral_lr20xx_bsp_lrmwp35_fann4.c#L484)
+- `Generic / Custom LR2021 SPI board`：见 [ral_lr20xx_bsp.c](ral/lr20xx_ral/ral_lr20xx_bsp.c#L484)
 
 对于自定义 `ESP-IDF + LR2021 SPI` 硬件，建议按实际射频模组和参考设计确认以下内容：
 
@@ -176,7 +360,7 @@
 - `LR2021_SPI_CLK`
 - `LR20XX_DIO7_GPIO`
 
-这些配置项定义见 [Kconfig](/home/cheny/code_temp/Lora/LiotLr2021/Kconfig)。
+这些配置项定义见 [Kconfig](Kconfig)。
 
 如果你的硬件不是按 `L-LRMAM36-FANN4` 的默认连接方式设计，那么这里的参数应视为必须检查项，而不是可选项。
 
@@ -184,16 +368,29 @@
 
 该组件按 ESP-IDF 组件方式组织，当前已经包含：
 
-- [CMakeLists.txt](/home/cheny/code_temp/Lora/LiotLr2021/CMakeLists.txt)
-- [idf_component.yml](/home/cheny/code_temp/Lora/LiotLr2021/idf_component.yml)
-- [LICENSE](/home/cheny/code_temp/Lora/LiotLr2021/LICENSE)
-- [NOTICE](/home/cheny/code_temp/Lora/LiotLr2021/NOTICE)
+- [CMakeLists.txt](CMakeLists.txt)
+- [idf_component.yml](idf_component.yml)
+- [LICENSE](LICENSE)
+- [NOTICE](NOTICE)
 
 在工程中集成后，用户通常只需要：
 
 1. 在 `menuconfig` 中选择目标射频芯片和 GPIO/SPI 参数
 2. 在应用层包含所需头文件
 3. 根据所选层级调用 `RAC`、`RALF` 或 `RAL` 接口
+
+## 示例工程
+
+如需参考该组件的使用方式、工程集成方法和基础调用示例，请使用以下例程仓库：
+
+- [esp32_lora_samples](https://github.com/lierda-iot/esp32_lora_samples.git)
+
+## 文档链接
+
+如需查看该组件的补充说明文档，请参考以下链接：
+
+- [钉钉文档](https://alidocs.dingtalk.com/i/nodes/dxXB52LJqnGE6GN4cQRNK0PX8qjMp697?utm_scene=team_space)
+- [钉钉文档](https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX32N52zwuAREozYpWMwvDqPk?utm_scene=team_space)
 
 ## 快速开始
 
@@ -257,7 +454,7 @@ idf.py build
 
 ## 版本信息
 
-当前 `RAC API` 版本定义见 [smtc_rac_version.h](/home/cheny/code_temp/Lora/LiotLr2021/rac_api/smtc_rac_version.h#L1)：
+当前 `RAC API` 版本定义见 [smtc_rac_version.h](rac_api/smtc_rac_version.h#L1)：
 
 - Major: `1`
 - Minor: `0`
@@ -269,8 +466,8 @@ idf.py build
 
 相关文件：
 
-- [LICENSE](/home/cheny/code_temp/Lora/LiotLr2021/LICENSE)
-- [NOTICE](/home/cheny/code_temp/Lora/LiotLr2021/NOTICE)
+- [LICENSE](LICENSE)
+- [NOTICE](NOTICE)
 
 如果分发源码或二进制，请保留上游版权声明、许可证文本和免责声明。
 
@@ -278,7 +475,7 @@ idf.py build
 
 如果后续要将该组件发布到 ESP Component Registry，建议在发布前再确认以下事项：
 
-- 更新 [idf_component.yml](/home/cheny/code_temp/Lora/LiotLr2021/idf_component.yml) 中的 `url`
+- 更新 [idf_component.yml](idf_component.yml) 中的 `url`
 - 补充使用例程链接
 - 进行至少一次目标芯片配置下的编译验证
 - 检查所有公开头文件是否确实属于稳定外部接口
