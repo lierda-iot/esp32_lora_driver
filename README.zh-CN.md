@@ -1,6 +1,6 @@
 # ESP LoRa Driver
 
-[简体中文](README.zh-CN.md) | [English](README.en.md)
+[English](README.md)
 
 仓库地址：<https://github.com/lierda-iot/esp32_lora_driver.git>
 
