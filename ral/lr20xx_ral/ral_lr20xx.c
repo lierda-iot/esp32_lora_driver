@@ -884,7 +884,20 @@ ral_status_t ral_lr20xx_set_flrc_pkt_params( const void* context, const ral_flrc
     {
         return status;
     }
-    return ( ral_status_t ) lr20xx_radio_flrc_set_pkt_params( context, &radio_pkt_params );
+
+    status = ( ral_status_t ) lr20xx_radio_flrc_set_pkt_params( context, &radio_pkt_params );
+    
+    // Apply Long Preamble Patch if needed
+    if( ( status == RAL_STATUS_OK ) && ( params->preamble_len_in_bits > 32 ) )
+    {
+        uint32_t reg_val = ( ( uint32_t ) params->preamble_len_in_bits >> 1 ) - 1;
+        lr20xx_regmem_write_regmem32_mask( context, 0x00f30814, 0xfff80000, reg_val << 19 );
+        
+        // ESP_LOGI("PATCH", "Preamble bits: %d, Reg value: 0x%08X", 
+        //          params->preamble_len_in_bits, (unsigned int)(reg_val << 19));
+    }
+    
+    return status;
 }
 
 ral_status_t ral_lr20xx_get_gfsk_rx_pkt_status( const void* context, ral_gfsk_rx_pkt_status_t* ral_rx_pkt_status )
@@ -1030,16 +1043,19 @@ ral_status_t ral_lr20xx_convert_flrc_mod_params_from_ral( const ral_flrc_mod_par
 ral_status_t ral_lr20xx_convert_flrc_pkt_params_from_ral( const ral_flrc_pkt_params_t*    ral_pkt_params,
                                                           lr20xx_radio_flrc_pkt_params_t* radio_pkt_params )
 {
-    if( ( ral_pkt_params->preamble_len_in_bits % 4 ) != 0 )
+    const uint16_t preamble_len_in_bits = ( uint16_t ) ( ral_pkt_params->preamble_len_in_bits );
+    if( ( preamble_len_in_bits % 4 ) != 0 )
     {
         return RAL_STATUS_UNKNOWN_VALUE;
     }
-    const uint8_t preamble_len_in_nibbles = ( uint8_t ) ( ral_pkt_params->preamble_len_in_bits / 4 );
-    if( ( preamble_len_in_nibbles == 0 ) || ( preamble_len_in_nibbles > 8 ) )
+    const uint16_t preamble_len_in_nibbles = ( uint16_t ) ( preamble_len_in_bits / 4 );
+    if( ( preamble_len_in_nibbles == 0 ) || ( preamble_len_in_nibbles > 4096 ) ) // Max 16383 bits = 4095.75 nibbles
     {
         return RAL_STATUS_UNKNOWN_VALUE;
     }
-    radio_pkt_params->preamble_len = ( lr20xx_radio_flrc_preamble_len_t ) ( preamble_len_in_nibbles - 1 );
+    // Standard driver only supports up to 8 nibbles (32 bits).
+    // For longer preamble, we set to 32 bits here and override with register patch later.
+    radio_pkt_params->preamble_len = ( lr20xx_radio_flrc_preamble_len_t ) ( ( preamble_len_in_nibbles > 8 ? 8 : preamble_len_in_nibbles ) - 1 );
 
     switch( ral_pkt_params->sync_word_len )
     {
