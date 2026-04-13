@@ -191,7 +191,7 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_write( const void* radio, const uint8_t
         return LR20XX_HAL_STATUS_OK;
     }
 
-    /* 构造连续 TX buffer（command + data） */
+    /* Build a contiguous TX buffer: command + data */
     uint8_t tx_buf[total_len];
 
     memcpy( tx_buf, cbuffer, cbuffer_length );
@@ -238,9 +238,9 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_direct_read( const void* radio, uint8_t
 
     spi_transaction_t t = {
         .flags = 0,
-        .length    = data_length * 8,  /* 产生的 SPI clock */
+        .length    = data_length * 8,  /* Number of generated SPI clock cycles */
         .tx_buffer = dummy,
-        .rx_buffer = data,             /* MISO -> data */
+        .rx_buffer = data,             /* MISO data destination */
     };
 
     lr20xx_hal_check_device_ready( );
@@ -265,7 +265,7 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_direct_read_fifo( const void* radio, co
                                                  const uint16_t command_length, uint8_t* data,
                                                  const uint16_t data_length )
 {
-    /* 构造 TX buffer：command + dummy(0x00) */
+    /* Build TX buffer: command + dummy bytes (0x00) */
     uint16_t total_len = command_length + data_length;
     uint8_t tx_buf[total_len];
     uint8_t rx_buf[total_len];
@@ -275,7 +275,7 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_direct_read_fifo( const void* radio, co
 
     spi_transaction_t t = {
         .flags = 0,
-        .length    = total_len * 8,     /* 总 clock 数 */
+        .length    = total_len * 8,     /* Total number of clock cycles */
         .tx_buffer = tx_buf,
         .rx_buffer = rx_buf,
     };
@@ -309,7 +309,7 @@ static void IRAM_ATTR lr20xx_hal_wait_on_busy( void )
 {
     while (gpio_get_level(RADIO_BUSY) == 1)
     {
-        // vTaskDelay(pdMS_TO_TICKS(1));      /* todo 后续可以换成中断+事件通知 */
+        // vTaskDelay(pdMS_TO_TICKS(1));      /* TODO: later this can be replaced with interrupt + event notification */
     }
 }
 
@@ -343,7 +343,7 @@ static void radio_gpio_init(void)
     io_conf.intr_type    = GPIO_INTR_DISABLE;
     gpio_config(&io_conf);
 
-    /* 默认拉高，避免上电误复位 */
+    /* Default high level to avoid unintended reset during power-up */
     gpio_set_level(RADIO_NRST, 1);
 
     /* ---------- NSS (CS) ---------- */
@@ -351,7 +351,7 @@ static void radio_gpio_init(void)
     io_conf.mode         = GPIO_MODE_OUTPUT;
     gpio_config(&io_conf);
 
-    /* 默认拉高（SPI 空闲态） */
+    /* Default high level for SPI idle state */
     gpio_set_level(RADIO_NSS, 1);
 
     /* ---------- BUSY ---------- */
@@ -395,11 +395,11 @@ static void radio_spi_device_init(void)
     }
 
     spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 16 * 1000 * 1000, /* 建议先 8 MHz */
+        .clock_speed_hz = 16 * 1000 * 1000, /* Start with 8 MHz if signal integrity needs tuning */
         .mode           = 0,              /* SPI Mode 0 */
-        .spics_io_num   = -1,             /* CS 由应用层控制 */
+        .spics_io_num   = -1,             /* CS is controlled by the application layer */
         .queue_size     = 1,
-        .flags          = 0,    /* 半双工 SPI_DEVICE_HALFDUPLEX */
+        .flags          = 0,    /* Half-duplex SPI_DEVICE_HALFDUPLEX */
     };
 
     esp_err_t ret = spi_bus_add_device(RADIO_SPI_HOST, &devcfg, &radio_spi);

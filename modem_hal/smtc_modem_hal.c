@@ -141,7 +141,7 @@ static esp_timer_handle_t modem_timer = NULL;
 static void ( *modem_timer_cb )( void* ) = NULL;
 static void* modem_timer_ctx = NULL;
 
-/* esp_timer 的内部回调（桥接） */
+/* Internal esp_timer callback wrapper */
 static void smtc_modem_timer_wrapper( void* arg )
 {
     (void) arg;
@@ -186,7 +186,7 @@ void smtc_modem_hal_stop_timer( void )
 
 /* ------------ IRQ management ------------*/
 
-/* 定义自旋锁 */
+/* Define spinlock */
 // static portMUX_TYPE smtc_modem_mux = portMUX_INITIALIZER_UNLOCKED;
 
 void smtc_modem_hal_disable_modem_irq( void )
@@ -443,12 +443,12 @@ void smtc_modem_hal_irq_config_radio_irq( void ( *callback )( void* context ), v
             .mode         = GPIO_MODE_INPUT,
             .pull_up_en   = GPIO_PULLUP_DISABLE,
             .pull_down_en = GPIO_PULLDOWN_ENABLE,
-            .intr_type    = GPIO_INTR_POSEDGE,   // LR20xx IRQ 为脉冲/上升沿
+            .intr_type    = GPIO_INTR_POSEDGE,   // LR20xx IRQ is pulse / rising-edge triggered
         };
 
         gpio_config( &io_conf );
 
-        // ISR service 只需安装一次
+        // The ISR service only needs to be installed once
         static bool isr_service_installed = false;
         if( !isr_service_installed )
         {
