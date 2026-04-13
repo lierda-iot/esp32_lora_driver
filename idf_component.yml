@@ -1,4 +1,4 @@
-version: "0.0.4"
+version: "0.0.5"
 description: "ESP-IDF component library for Semtech LoRa radios, currently targeting LR20xx/LR2021, with ESP platform integration and public RAC, RALF, and RAL layers; planned to expand with SX126x and LR11xx support."
 url: "https://github.com/lierda-iot/esp32_lora_driver.git"
 repository: "https://github.com/lierda-iot/esp32_lora_driver.git"
