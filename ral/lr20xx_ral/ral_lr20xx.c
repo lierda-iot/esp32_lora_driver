@@ -240,16 +240,16 @@ ral_status_t ral_lr20xx_init( const void* context )
     }
     else if( xosc_cfg == RAL_XOSC_CFG_XTAL )
     {
-        // uint8_t  xosc_trim_xta          = 0;
-        // uint8_t  xosc_trim_xtb          = 0;
-        // uint16_t xosc_extra_wait_time_us = 0;
-        // ral_lr20xx_bsp_get_xosc_trim_cfg( context, &xosc_trim_xta, &xosc_trim_xtb, &xosc_extra_wait_time_us );
-        // status = ( ral_status_t ) lr20xx_system_configure_xosc( context, xosc_trim_xta, xosc_trim_xtb,
-        //                                                         xosc_extra_wait_time_us );
-        // if( status != RAL_STATUS_OK )
-        // {
-        //     return status;
-        // }
+        uint8_t  xosc_trim_xta          = 0;
+        uint8_t  xosc_trim_xtb          = 0;
+        uint16_t xosc_extra_wait_time_us = 0;
+        ral_lr20xx_bsp_get_xosc_trim_cfg( context, &xosc_trim_xta, &xosc_trim_xtb, &xosc_extra_wait_time_us );
+        status = ( ral_status_t ) lr20xx_system_configure_xosc( context, xosc_trim_xta, xosc_trim_xtb,
+                                                                xosc_extra_wait_time_us );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
 
         // uint16_t ntc_r_ratio = 0;
         // uint16_t ntc_beta    = 0;

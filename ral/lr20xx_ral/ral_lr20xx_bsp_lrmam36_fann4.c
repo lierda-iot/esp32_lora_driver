@@ -73,8 +73,8 @@
 // This targets about 12 pF per leg once PCB parasitics are considered:
 // XTA ~= 11.3 pF + 2 * 0.47 pF = 12.24 pF
 // XTB ~= 10.1 pF + 4 * 0.47 pF = 11.98 pF
-#define LR20XX_XOSC_TRIM_XTA_DEFAULT          0
-#define LR20XX_XOSC_TRIM_XTB_DEFAULT          0
+#define LR20XX_XOSC_TRIM_XTA_DEFAULT          11
+#define LR20XX_XOSC_TRIM_XTB_DEFAULT          11
 #define LR20XX_XOSC_EXTRA_WAIT_TIME_US_DEFAULT 0
 
 // Default NTC configuration for a typical 10 kOhm / B3950 thermistor with a 10 kOhm bias resistor.
