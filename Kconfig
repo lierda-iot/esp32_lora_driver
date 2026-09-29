@@ -15,6 +15,39 @@ config SMTC_RADIO_LR20XX
 
 endchoice
 
+if SMTC_RADIO_SX126X
+
+choice SMTC_SX126X_CHIP
+    prompt "SX126x chip model"
+    default SMTC_RADIO_SX1262
+
+config SMTC_RADIO_SX1261
+    bool "SX1261"
+
+config SMTC_RADIO_SX1262
+    bool "SX1262"
+
+config SMTC_RADIO_SX1268
+    bool "SX1268"
+
+endchoice
+
+config SMTC_SX126X_ENABLE_BPSK
+    bool "Enable SX126x BPSK driver"
+    default n
+    help
+        Build the optional SX126x BPSK driver source.
+        This follows the upstream SX126X_ENABLE_BPSK option.
+
+config SMTC_SX126X_ENABLE_LR_FHSS
+    bool "Enable SX126x LR-FHSS driver"
+    default y
+    help
+        Build the optional SX126x LR-FHSS driver sources.
+        Upstream RAC integration enables this for SX126x builds.
+
+endif # SMTC_RADIO_SX126X
+
 config LIOT_GPIO_RANGE_MIN
     int
     default -1
@@ -55,7 +88,70 @@ endchoice
 
 endmenu
 
+menu "Radio Planner"
+
+config SMTC_RP_MARGIN_DELAY
+    int "Radio Planner margin delay in ms"
+    default 8
+    range 1 100
+    help
+        Safety margin used by the radio planner scheduling logic.
+        Increase this value if tight radio tasks miss timing on the ESP target.
+
+choice SMTC_REGION_DUTY_CYCLE
+    prompt "Region duty-cycle profile"
+    default SMTC_REGION_DUTY_CYCLE_NONE
+    help
+        Select a duty-cycle region macro for the radio planner.
+        Leave disabled when region policy is handled by the upper layer.
+
+config SMTC_REGION_DUTY_CYCLE_NONE
+    bool "Disabled"
+
+config SMTC_REGION_EU_868
+    bool "EU 868"
+
+config SMTC_REGION_RU_864
+    bool "RU 864"
+
+endchoice
+
+endmenu
+
+if SMTC_RADIO_LR11XX
+
+config SMTC_LR11XX_CRC_OVER_SPI
+    bool "Enable LR11xx CRC over SPI"
+    default n
+    help
+        Enable CRC-protected SPI transactions for LR11xx radios.
+        Keep disabled unless the LR11xx hardware and firmware path requires it.
+
+config SMTC_LR11XX_DRIVER_GEOLOCATION
+    bool "Enable LR11xx geolocation driver APIs"
+    default y
+    help
+        Build LR11xx GNSS and Wi-Fi geolocation driver sources.
+        This follows the upstream LR11XX_DRIVER_GEOLOCATION option.
+
+endif # SMTC_RADIO_LR11XX
+
 if SMTC_RADIO_LR20XX
+
+choice SMTC_LR20XX_CHIP
+    prompt "LR20xx chip model"
+    default SMTC_RADIO_LR2021
+
+config SMTC_RADIO_LR2012
+    bool "LR2012"
+
+config SMTC_RADIO_LR2021
+    bool "LR2021"
+
+config SMTC_RADIO_LR2022
+    bool "LR2022"
+
+endchoice
 
 choice LIERDA_LR20XX_BOARD
     prompt "Lierda LR20XX board"

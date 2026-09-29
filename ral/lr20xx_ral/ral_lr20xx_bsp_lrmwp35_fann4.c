@@ -362,7 +362,7 @@ void ral_lr20xx_bsp_get_tx_cfg( const void* context, const ral_lr20xx_bsp_tx_cfg
     lr20xx_radio_common_pa_selection_t pa_type;
 
     // check frequency band first to choose Low Frequency of High Frequency Power Amplifier
-    if( input_params->freq_in_hz >= 1600000000 )  // 1.6GHz
+    if( input_params->freq_in_hz >= 1500000000 )  // 1.6GHz
     {
         pa_type = LR20XX_RADIO_COMMON_PA_SEL_HF;
     }
@@ -378,7 +378,7 @@ void ral_lr20xx_bsp_get_tx_cfg( const void* context, const ral_lr20xx_bsp_tx_cfg
 void ral_lr20xx_bsp_get_rx_cfg( const void* context, const uint32_t freq_in_hz, lr20xx_radio_common_rx_path_t* rx_path,
                                 lr20xx_radio_common_rx_path_boost_mode_t* boost_mode )
 {
-    if( freq_in_hz >= 1600000000 )  // 1.6GHz
+    if( freq_in_hz >= 1500000000 )  // 1.5GHz
     {
         *rx_path = LR20XX_RADIO_COMMON_RX_PATH_HF;
     }
@@ -397,9 +397,9 @@ void ral_lr20xx_bsp_get_front_end_calibration_cfg(
     lr20xx_radio_common_rx_path_boost_mode_t boost_mode = LR20XX_RADIO_COMMON_RX_PATH_BOOST_MODE_NONE;
 
     uint32_t freq_in_hz[3] = {
-        470000000,   // Frequency 0 (range from 430MHz to 510MHz)
-        897500000,   // Frequency 1 (range from 867MHz to 928MHz)
-        2441000000,  // Frequency 2 (range from 2.403GHz to 2.479GHz)
+        870000000,   // Frequency 0 (range from 850MHz to 890MHz) +/- 20MHz
+        920000000,   // Frequency 1 (range from 900MHz to 940MHz) +/- 20MHz
+        2441000000,  // Frequency 2 (range from 2.391GHz to 2.491GHz) +/- 50MHz
     };
 
     for( uint8_t i = 0; i < 3; i++ )

@@ -64,15 +64,22 @@ extern "C" {
         .set_tx_cw = ral_sx126x_set_tx_cw, .set_tx_infinite_preamble = ral_sx126x_set_tx_infinite_preamble,           \
         .cal_img = ral_sx126x_cal_img, .set_tx_cfg = ral_sx126x_set_tx_cfg,                                           \
         .set_pkt_payload = ral_sx126x_set_pkt_payload, .get_pkt_payload = ral_sx126x_get_pkt_payload,                 \
+        .get_pkt_size = ral_sx126x_get_pkt_size, .get_data_rx_buffer = ral_sx126x_get_data_rx_buffer,                 \
+        .clear_rx_fifo = ral_sx126x_clear_rx_fifo, .clear_tx_fifo = ral_sx126x_clear_tx_fifo,                         \
+        .get_tx_fifo_level = ral_sx126x_get_tx_fifo_level, .get_rx_fifo_level = ral_sx126x_get_rx_fifo_level,         \
+        .cfg_fifo_irq = ral_sx126x_cfg_fifo_irq, .get_fifo_irq = ral_sx126x_get_fifo_irq,                             \
+        .clear_fifo_irq = ral_sx126x_clear_fifo_irq, .get_and_clear_fifo_irq = ral_sx126x_get_and_clear_fifo_irq,     \
         .get_irq_status = ral_sx126x_get_irq_status, .clear_irq_status = ral_sx126x_clear_irq_status,                 \
         .get_and_clear_irq_status = ral_sx126x_get_and_clear_irq_status,                                              \
         .set_dio_irq_params = ral_sx126x_set_dio_irq_params, .set_rf_freq = ral_sx126x_set_rf_freq,                   \
         .set_pkt_type = ral_sx126x_set_pkt_type, .get_pkt_type = ral_sx126x_get_pkt_type,                             \
         .set_gfsk_mod_params = ral_sx126x_set_gfsk_mod_params, .set_gfsk_pkt_params = ral_sx126x_set_gfsk_pkt_params, \
+        .set_gfsk_pkt_address = ral_sx126x_set_gfsk_pkt_address,                                                      \
         .set_lora_mod_params = ral_sx126x_set_lora_mod_params, .set_lora_pkt_params = ral_sx126x_set_lora_pkt_params, \
         .set_lora_cad_params      = ral_sx126x_set_lora_cad_params,                                                   \
         .set_lora_symb_nb_timeout = ral_sx126x_set_lora_symb_nb_timeout,                                              \
         .set_flrc_mod_params = ral_sx126x_set_flrc_mod_params, .set_flrc_pkt_params = ral_sx126x_set_flrc_pkt_params, \
+        .set_flrc_long_preamble_len_in_bits = ral_sx126x_set_flrc_long_preamble_len_in_bits,                          \
         .get_gfsk_rx_pkt_status = ral_sx126x_get_gfsk_rx_pkt_status,                                                  \
         .get_lora_rx_pkt_status = ral_sx126x_get_lora_rx_pkt_status,                                                  \
         .get_flrc_rx_pkt_status = ral_sx126x_get_flrc_rx_pkt_status, .get_rssi_inst = ral_sx126x_get_rssi_inst,       \
@@ -243,6 +250,62 @@ ral_status_t ral_sx126x_get_pkt_payload( const void* context, uint16_t max_size_
                                          uint16_t* size_in_bytes );
 
 /**
+ * @see ral_get_pkt_size
+ */
+ral_status_t ral_sx126x_get_pkt_size( const void* context, uint16_t* size_in_bytes );
+
+/**
+ * @see ral_get_data_rx_buffer
+ */
+ral_status_t ral_sx126x_get_data_rx_buffer( const void* context, uint8_t* buffer, uint16_t size_in_bytes );
+
+/**
+ * @see ral_clear_rx_fifo
+ */
+ral_status_t ral_sx126x_clear_rx_fifo( const void* context );
+
+/**
+ * @see ral_clear_tx_fifo
+ */
+ral_status_t ral_sx126x_clear_tx_fifo( const void* context );
+
+/**
+ * @see ral_get_tx_fifo_level
+ */
+ral_status_t ral_sx126x_get_tx_fifo_level( const void* context, uint16_t* fifo_level );
+
+/**
+ * @see ral_get_rx_fifo_level
+ */
+ral_status_t ral_sx126x_get_rx_fifo_level( const void* context, uint16_t* fifo_level );
+
+/**
+ * @see ral_cfg_fifo_irq
+ */
+ral_status_t ral_sx126x_cfg_fifo_irq( const void* context, ral_radio_fifo_flag_t rx_fifo_irq_enable,
+                                      ral_radio_fifo_flag_t tx_fifo_irq_enable, uint16_t rx_fifo_high_threshold,
+                                      uint16_t tx_fifo_low_threshold, uint16_t rx_fifo_low_threshold,
+                                      uint16_t tx_fifo_high_threshold );
+
+/**
+ * @see ral_get_fifo_irq
+ */
+ral_status_t ral_sx126x_get_fifo_irq( const void* context, ral_radio_fifo_flag_t* rx_fifo_flags,
+                                      ral_radio_fifo_flag_t* tx_fifo_flags );
+
+/**
+ * @see ral_clear_fifo_irq
+ */
+ral_status_t ral_sx126x_clear_fifo_irq( const void* context, ral_radio_fifo_flag_t rx_fifo_flags_to_clear,
+                                        ral_radio_fifo_flag_t tx_fifo_flags_to_clear );
+
+/**
+ * @see ral_get_and_clear_fifo_irq
+ */
+ral_status_t ral_sx126x_get_and_clear_fifo_irq( const void* context, ral_radio_fifo_flag_t* rx_fifo_flags,
+                                                ral_radio_fifo_flag_t* tx_fifo_flags );
+
+/**
  * @see ral_get_irq_status
  */
 ral_status_t ral_sx126x_get_irq_status( const void* context, ral_irq_t* irq );
@@ -322,6 +385,11 @@ ral_status_t ral_sx126x_set_flrc_mod_params( const void* context, const ral_flrc
  * @see ral_set_flrc_pkt_params
  */
 ral_status_t ral_sx126x_set_flrc_pkt_params( const void* context, const ral_flrc_pkt_params_t* params );
+
+/**
+ * @see ral_set_flrc_long_preamble_len_in_bits
+ */
+ral_status_t ral_sx126x_set_flrc_long_preamble_len_in_bits( const void* context, uint16_t preamble_len_in_bits );
 
 /**
  * @see ral_get_gfsk_rx_pkt_status

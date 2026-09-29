@@ -1,11 +1,11 @@
 /**
- * @file      ral_lr20xx_bsp.c
+ * @file      lr20xx_hal.c
  *
  * @brief     HAL implementation for LR20xx radio chip.
  *
  *
  * The Clear BSD License
- * Copyright Semtech Corporation 2021. All rights reserved.
+ * Copyright Semtech Corporation 2025. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the disclaimer
@@ -39,10 +39,12 @@
  */
 
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include "lr20xx_hal.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 
 /*
@@ -131,8 +133,8 @@ lr20xx_hal_status_t lr20xx_hal_wakeup( const void* radio )
 {
     // Busy is HIGH in sleep mode, wake-up the device with a small glitch on NSS
     gpio_set_level( RADIO_NSS, 0 );
-    // wait for 1ms
-    vTaskDelay(pdMS_TO_TICKS(1));
+    // wait for 100us
+    esp_rom_delay_us( 100 );
     gpio_set_level( RADIO_NSS, 1 );
     radio_mode = RADIO_AWAKE;
     return LR20XX_HAL_STATUS_OK;
@@ -323,8 +325,8 @@ static void IRAM_ATTR lr20xx_hal_check_device_ready( void )
     {
         // Busy is HIGH in sleep mode, wake-up the device with a small glitch on NSS
         gpio_set_level( RADIO_NSS, 0 );
-        // wait for 1ms
-        vTaskDelay(pdMS_TO_TICKS(1));
+        // wait for 100us
+        esp_rom_delay_us( 100 );
         gpio_set_level( RADIO_NSS, 1 );
         lr20xx_hal_wait_on_busy( );
         radio_mode = RADIO_AWAKE;

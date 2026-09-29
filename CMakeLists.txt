@@ -23,14 +23,22 @@ if(CONFIG_SMTC_RADIO_SX126X)
     )
 
     list(APPEND RADIO_DRIVER_SRCS
-        radio_drivers/sx126x_driver/src/lr_fhss_mac.c
-        radio_drivers/sx126x_driver/src/sx126x_bpsk.c
         radio_drivers/sx126x_driver/src/sx126x_driver_version.c
-        radio_drivers/sx126x_driver/src/sx126x_lr_fhss.c
         radio_drivers/sx126x_driver/src/sx126x.c
     )
+    if(CONFIG_SMTC_SX126X_ENABLE_BPSK)
+        list(APPEND RADIO_DRIVER_SRCS
+            radio_drivers/sx126x_driver/src/sx126x_bpsk.c
+        )
+    endif()
+    if(CONFIG_SMTC_SX126X_ENABLE_LR_FHSS)
+        list(APPEND RADIO_DRIVER_SRCS
+            radio_drivers/sx126x_driver/src/lr_fhss_mac.c
+            radio_drivers/sx126x_driver/src/sx126x_lr_fhss.c
+        )
+    endif()
     list(APPEND PUB_RADIO_DRIVER_INCLUDES
-        radio_drivers/sx126x_driver/inc
+        radio_drivers/sx126x_driver/src
     )
 
     list(APPEND RAL_SRCS 
@@ -60,17 +68,21 @@ elseif(CONFIG_SMTC_RADIO_LR11XX)
         radio_drivers/lr11xx_driver/src/lr11xx_bootloader.c
         radio_drivers/lr11xx_driver/src/lr11xx_crypto_engine.c
         radio_drivers/lr11xx_driver/src/lr11xx_driver_version.c
-        radio_drivers/lr11xx_driver/src/lr11xx_gnss.c
         radio_drivers/lr11xx_driver/src/lr11xx_lr_fhss.c
         radio_drivers/lr11xx_driver/src/lr11xx_radio_timings.c
         radio_drivers/lr11xx_driver/src/lr11xx_radio.c
         radio_drivers/lr11xx_driver/src/lr11xx_regmem.c
         radio_drivers/lr11xx_driver/src/lr11xx_rttof.c
         radio_drivers/lr11xx_driver/src/lr11xx_system.c
-        radio_drivers/lr11xx_driver/src/lr11xx_wifi.c
     )
+    if(CONFIG_SMTC_LR11XX_DRIVER_GEOLOCATION)
+        list(APPEND RADIO_DRIVER_SRCS
+            radio_drivers/lr11xx_driver/src/lr11xx_gnss.c
+            radio_drivers/lr11xx_driver/src/lr11xx_wifi.c
+        )
+    endif()
     list(APPEND PUB_RADIO_DRIVER_INCLUDES
-        radio_drivers/lr11xx_driver/inc
+        radio_drivers/lr11xx_driver/src
     )
 
     list(APPEND RAL_SRCS 
@@ -98,6 +110,8 @@ elseif(CONFIG_SMTC_RADIO_LR20XX)
 
     list(APPEND RADIO_DRIVER_SRCS
         radio_drivers/lr20xx_driver/src/lr20xx_driver_version.c
+        radio_drivers/lr20xx_driver/src/lr20xx_patch.c
+        radio_drivers/lr20xx_driver/src/lr20xx_pram_load.c
         radio_drivers/lr20xx_driver/src/lr20xx_radio_bluetooth_le.c
         radio_drivers/lr20xx_driver/src/lr20xx_radio_bpsk.c
         radio_drivers/lr20xx_driver/src/lr20xx_radio_common.c
@@ -166,6 +180,7 @@ list(APPEND RAC_SRCS
     rac/smtc_rac_lbt.c
     rac/smtc_rac_lora.c
     rac/smtc_rac_lrfhss.c
+    rac/smtc_rac_flrc_burst.c
     rac/smtc_rac.c
 )
 
@@ -212,8 +227,51 @@ idf_component_register(
        esp_driver_spi
        freertos
        esp_timer
+       esp_rom
 )
 
+
+if(CONFIG_SMTC_RADIO_SX126X)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE SX126X)
+
+    if(CONFIG_SMTC_RADIO_SX1261)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE SX1261)
+    elseif(CONFIG_SMTC_RADIO_SX1262)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE SX1262)
+    elseif(CONFIG_SMTC_RADIO_SX1268)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE SX1268)
+    endif()
+elseif(CONFIG_SMTC_RADIO_LR11XX)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE LR11XX)
+elseif(CONFIG_SMTC_RADIO_LR20XX)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE LR20XX)
+
+    if(CONFIG_SMTC_RADIO_LR2012)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE LR2012)
+    elseif(CONFIG_SMTC_RADIO_LR2021)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE LR2021)
+    elseif(CONFIG_SMTC_RADIO_LR2022)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE LR2022)
+    endif()
+endif()
+
+# ------------------------------------------------------------------
+# Radio planner and optional feature mapping
+# ------------------------------------------------------------------
+
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    RP_MARGIN_DELAY=${CONFIG_SMTC_RP_MARGIN_DELAY}
+)
+
+if(CONFIG_SMTC_LR11XX_CRC_OVER_SPI)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE USE_LR11XX_CRC_OVER_SPI=1)
+endif()
+
+if(CONFIG_SMTC_REGION_EU_868)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE REGION_EU_868)
+elseif(CONFIG_SMTC_REGION_RU_864)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE REGION_RU_864)
+endif()
 
 # ------------------------------------------------------------------
 # RAC logging profile mapping
@@ -223,18 +281,21 @@ if(CONFIG_SMTC_RAC_LOG_OFF)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE
         RAC_FSK_LOG_ENABLE=0
         RAC_LORA_LOG_ENABLE=0
+        RAC_LOG_ENABLE=0
         RAC_LRFHSS_LOG_ENABLE=0
     )
 elseif(CONFIG_SMTC_RAC_LOG_MINIMAL)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE
         RAC_FSK_LOG_ENABLE=0
         RAC_LORA_LOG_ENABLE=1
+        RAC_LOG_ENABLE=1
         RAC_LRFHSS_LOG_ENABLE=0
     )
 elseif(CONFIG_SMTC_RAC_LOG_VERBOSE OR CONFIG_SMTC_RAC_LOG_ALL)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE
         RAC_FSK_LOG_ENABLE=1
         RAC_LORA_LOG_ENABLE=1
+        RAC_LOG_ENABLE=1
         RAC_LRFHSS_LOG_ENABLE=1
     )
 endif()

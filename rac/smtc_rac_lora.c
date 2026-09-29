@@ -38,6 +38,7 @@
  */
 
 #include <stdint.h>   // C99 types
+#include <inttypes.h> // PRIu32 macros
 #include <stdbool.h>  // bool type
 
 #include "radio_planner.h"
@@ -92,11 +93,15 @@
     {                        \
     } while( 0 )
 #endif
-#if defined( CONFIG_SMTC_RADIO_SX126X )
+#if defined( SX128X )
+#include "ralf_sx128x.h"
+#elif defined( SX126X )
 #include "ralf_sx126x.h"
-#elif defined( CONFIG_SMTC_RADIO_LR11XX )
+#elif defined( LR11XX )
 #include "ralf_lr11xx.h"
-#elif defined( CONFIG_SMTC_RADIO_LR20XX )
+#elif defined( SX127X )
+#include "ralf_sx127x.h"
+#elif defined( LR20XX )
 #include "ralf_lr20xx.h"
 #endif
 
@@ -174,10 +179,10 @@ smtc_rac_return_code_t smtc_rac_lora( uint8_t radio_access_id )
     }
     // Log operation type and key parameters
     RAC_LOG_INFO( "Operation: %s", rac_config->radio_params.lora.is_tx ? "TRANSMISSION" : "RECEPTION" );
-    RAC_LOG_CONFIG( "Frequency: %lu Hz (%.1f MHz)", rac_config->radio_params.lora.frequency_in_hz,
+    RAC_LOG_CONFIG( "Frequency: %" PRIu32 " Hz (%.1f MHz)", rac_config->radio_params.lora.frequency_in_hz,
                     ( float ) rac_config->radio_params.lora.frequency_in_hz / 1000000.0f );
-    RAC_LOG_CONFIG( "SF: %d, BW: %d, CR: 4/%d", rac_config->radio_params.lora.sf, rac_config->radio_params.lora.bw,
-                    rac_config->radio_params.lora.cr + 5 );
+    RAC_LOG_CONFIG( "SF: %d, BW: %d, CR: %s", rac_config->radio_params.lora.sf, rac_config->radio_params.lora.bw,
+                    ral_lora_cr_to_str( rac_config->radio_params.lora.cr ) );
     if( rac_config->radio_params.lora.is_tx )
     {
         RAC_LOG_TX( "TX Power: %d dBm, Payload Size: %d bytes", rac_config->radio_params.lora.tx_power_in_dbm,
@@ -185,7 +190,7 @@ smtc_rac_return_code_t smtc_rac_lora( uint8_t radio_access_id )
     }
     else
     {
-        RAC_LOG_RX( "RX Timeout: %lu ms", rac_config->radio_params.lora.rx_timeout_ms );
+        RAC_LOG_RX( "RX Timeout: %" PRIu32 " ms", rac_config->radio_params.lora.rx_timeout_ms );
     }
 
     if( rac_config->radio_params.lora.is_ranging_exchange )
@@ -212,7 +217,7 @@ smtc_rac_return_code_t smtc_rac_lora( uint8_t radio_access_id )
         ( rac_config->radio_params.lora.is_tx == true ) ? &( rp_radio_params.tx.lora.mod_params )
                                                         : &( rp_radio_params.rx.lora.mod_params ) );
 
-    RAC_LOG_INFO( "Estimated time on air: %lu ms", time_on_air_ms );
+    RAC_LOG_INFO( "Estimated time on air: %" PRIu32 " ms", time_on_air_ms );
 
     rp_task_t rp_task = {
         .hook_id = radio_access_id,
@@ -220,7 +225,9 @@ smtc_rac_return_code_t smtc_rac_lora( uint8_t radio_access_id )
         .state = ( rac_config->scheduler_config.scheduling == SMTC_RAC_SCHEDULED_TRANSACTION ) ? RP_TASK_STATE_SCHEDULE
                                                                                                : RP_TASK_STATE_ASAP,
         .schedule_task_low_priority = false,
-        .duration_time_ms           = time_on_air_ms,
+        .duration_time_ms           = ( rac_config->radio_params.lora.is_tx == true )
+                                          ? time_on_air_ms
+                                          : rac_config->scheduler_config.duration_time_ms,
         .start_time_ms              = rac_config->scheduler_config.start_time_ms,
         .launch_task_callbacks =
             ( rac_config->radio_params.lora.is_tx == true ) ? smtc_rac_tx_callback : smtc_rac_rx_callback,
@@ -242,11 +249,11 @@ smtc_rac_return_code_t smtc_rac_lora( uint8_t radio_access_id )
         rp_task.type = RP_TASK_TYPE_CAD_TO_RX;
     }
 
-    RAC_LOG_INFO( "Scheduling: %s (start time: %lu ms)",
+    RAC_LOG_INFO( "Scheduling: %s (start time: %" PRIu32 " ms)",
                   ( rac_config->scheduler_config.scheduling == SMTC_RAC_SCHEDULED_TRANSACTION ) ? "SCHEDULED" : "ASAP",
                   rac_config->scheduler_config.start_time_ms );
 
-    RAC_LOG_DEBUG( "Enqueuing task to radio planner..." );
+    RAC_LOG_DEBUG( "Enqueuing task to radio planner...callback address %p", (void*)rp_task.launch_task_callbacks );
 
     if( rp_task_enqueue( smtc_rac_get_rp( ), &rp_task,
                          ( rac_config->radio_params.lora.is_tx == true )
@@ -317,9 +324,9 @@ static void update_radio_params_for_ranging( smtc_rac_context_t* rac_config, rp_
 }
 static void smtc_rac_prepare_cad( ralf_params_lora_cad_t* params_lora_cad, radio_planner_t* rp )
 {
-    uint8_t             id         = rp->radio_task_id;
-    smtc_rac_context_t* rac_config = smtc_rac_get_context( id );
-    ral_status_t cad_status = RAL_STATUS_OK;
+    uint8_t             id                                   = rp->radio_task_id;
+    smtc_rac_context_t* rac_config                           = smtc_rac_get_context( id );
+    ral_status_t        cad_status                           = RAL_STATUS_OK;
     params_lora_cad->sf                                      = rac_config->cad_context.sf;
     params_lora_cad->bw                                      = rac_config->cad_context.bw;
     params_lora_cad->rf_freq_in_hz                           = rac_config->cad_context.rf_freq_in_hz;
@@ -335,8 +342,10 @@ static void smtc_rac_prepare_cad( ralf_params_lora_cad_t* params_lora_cad, radio
     if( rac_config->cad_context.cad_exit_mode == RAL_LORA_CAD_ONLY )
     {
         cad_status = ralf_setup_lora_cad( rp->radio, params_lora_cad );
-    }else {
-        cad_status = ral_set_lora_cad_params( &( rp->radio->ral ), &(params_lora_cad->ral_lora_cad_params)  );
+    }
+    else
+    {
+        cad_status = ral_set_lora_cad_params( &( rp->radio->ral ), &( params_lora_cad->ral_lora_cad_params ) );
     }
     RAC_LOG_INFO( "cad status = %d", cad_status );
     SMTC_MODEM_HAL_PANIC_ON_FAILURE( cad_status == RAL_STATUS_OK );
@@ -369,6 +378,7 @@ static void smtc_rac_cad_only_callback( void* rp_void )
     rp_stats_set_rx_timestamp( &rp->stats, smtc_modem_hal_get_time_in_ms( ) );
     return;
 }
+
 static void smtc_rac_tx_callback( void* rp_void )
 {
     if( rp_void == NULL )
@@ -409,10 +419,6 @@ static void smtc_rac_tx_callback( void* rp_void )
             ral_set_lora_mod_params( &( rp->radio->ral ), &radio_params->tx.lora.mod_params ) == RAL_STATUS_OK );
 
 #if defined( LR20XX )
-        // Have to be done after ral_set_rf_freq, ral_set_pkt_type, and ral_set_lora_mod_params
-        SMTC_MODEM_HAL_PANIC_ON_FAILURE( lr20xx_workarounds_rttof_truncate_pll_freq_step( rp->radio->ral.context ) ==
-                                         LR20XX_STATUS_OK );
-
         if( radio_params->rttof.bw_ranging == RAL_LORA_BW_200_KHZ ||
             radio_params->rttof.bw_ranging == RAL_LORA_BW_400_KHZ ||
             radio_params->rttof.bw_ranging == RAL_LORA_BW_800_KHZ )
@@ -464,8 +470,10 @@ static void smtc_rac_tx_callback( void* rp_void )
         ralf_params_lora_cad_t params_lora_cad;
         smtc_rac_prepare_cad( &params_lora_cad, rp );
 
+        // RAL_IRQ_RX_TIMEOUT = timeout for the Tx too.
         SMTC_MODEM_HAL_PANIC_ON_FAILURE(
-            ral_set_dio_irq_params( &( rp->radio->ral ), RAL_IRQ_CAD_OK | RAL_IRQ_TX_DONE ) == RAL_STATUS_OK );
+            ral_set_dio_irq_params( &( rp->radio->ral ), RAL_IRQ_CAD_OK | RAL_IRQ_TX_DONE | RAL_IRQ_RX_TIMEOUT ) ==
+            RAL_STATUS_OK );
     }
 
     rac_config->smtc_rac_data_result.radio_start_timestamp_ms = smtc_modem_hal_get_time_in_ms( );
@@ -510,14 +518,14 @@ static void smtc_rac_tx_callback( void* rp_void )
     rp_stats_set_tx_timestamp( &rp->stats, tx_timestamp );
 
     RAC_LOG_TX( "LoRa TX Started Successfully!" );
-    RAC_LOG_TX( "  Frequency: %u Hz (%.1f MHz)", radio_params->tx.lora.rf_freq_in_hz,
+    RAC_LOG_TX( "  Frequency: %" PRIu32 " Hz (%.1f MHz)", radio_params->tx.lora.rf_freq_in_hz,
                 ( float ) radio_params->tx.lora.rf_freq_in_hz / 1000000.0f );
     RAC_LOG_TX( "  Power: %d dBm", radio_params->tx.lora.output_pwr_in_dbm );
     RAC_LOG_TX( "  SF: %s, BW: %s", ral_lora_sf_to_str( radio_params->tx.lora.mod_params.sf ),
                 ral_lora_bw_to_str( radio_params->tx.lora.mod_params.bw ) );
     RAC_LOG_TX( "  Payload Length: %u bytes", rp->payload_buffer_size[id] );
     RAC_LOG_TX( "  Ranging: %s", ( radio_params->pkt_type == RAL_PKT_TYPE_RTTOF ) ? "ENABLED" : "DISABLED" );
-    RAC_LOG_TX( "  TX Timestamp: %lu ms", tx_timestamp );
+    RAC_LOG_TX( "  TX Timestamp: %" PRIu32 " ms", tx_timestamp );
     RAC_LOG_TX( "===== LoRa TX Callback - Complete =====" );
 }
 
@@ -549,10 +557,6 @@ static void smtc_rac_rx_callback( void* rp_void )
             ral_set_lora_mod_params( &( rp->radio->ral ), &radio_params->rx.lora.mod_params ) == RAL_STATUS_OK );
 
 #if defined( LR20XX )
-        // Have to be done after ral_set_rf_freq, ral_set_pkt_type, and ral_set_lora_mod_params
-        SMTC_MODEM_HAL_PANIC_ON_FAILURE( lr20xx_workarounds_rttof_truncate_pll_freq_step( rp->radio->ral.context ) ==
-                                         LR20XX_STATUS_OK );
-
         if( radio_params->rttof.bw_ranging == RAL_LORA_BW_200_KHZ ||
             radio_params->rttof.bw_ranging == RAL_LORA_BW_400_KHZ ||
             radio_params->rttof.bw_ranging == RAL_LORA_BW_800_KHZ )
@@ -625,6 +629,6 @@ static void smtc_rac_rx_callback( void* rp_void )
     rp_stats_set_rx_timestamp( &rp->stats, smtc_modem_hal_get_time_in_ms( ) );
     RAC_LOG_RX( "===== LoRa RX Callback - Starting =====" );
     RAC_LOG_RX( "Radio Task ID: %u", id );
-    RAC_LOG_RX( "Frequency: %lu Hz (%.1f MHz)", radio_params->rx.lora.rf_freq_in_hz,
+    RAC_LOG_RX( "Frequency: %" PRIu32 " Hz (%.1f MHz)", radio_params->rx.lora.rf_freq_in_hz,
                 ( float ) radio_params->rx.lora.rf_freq_in_hz / 1000000.0f );
 }

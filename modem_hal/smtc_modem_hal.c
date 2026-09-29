@@ -591,7 +591,7 @@ uint16_t smtc_modem_hal_get_voltage_mv( void )
 }
 
 /* ------------ Needed for Store and Forward service  ------------*/
-#if defined( USE_STORE_AND_FORWARD )
+#if defined( ADD_SMTC_STORE_AND_FORWARD)
 uint16_t smtc_modem_hal_store_and_forward_get_number_of_pages( void )
 {
     return 10;

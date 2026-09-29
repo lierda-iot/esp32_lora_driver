@@ -447,6 +447,104 @@ ral_status_t ral_lr11xx_get_pkt_payload( const void* context, uint16_t max_size_
     return status;
 }
 
+ral_status_t ral_lr11xx_get_pkt_size( const void* context, uint16_t* size_in_bytes )
+{
+    ral_status_t                    status                 = RAL_STATUS_ERROR;
+    lr11xx_radio_rx_buffer_status_t radio_rx_buffer_status = { 0 };
+
+    if( size_in_bytes == 0 )
+    {
+        return RAL_STATUS_ERROR;
+    }
+
+    status = ( ral_status_t ) lr11xx_radio_get_rx_buffer_status( context, &radio_rx_buffer_status );
+    if( status == RAL_STATUS_OK )
+    {
+        *size_in_bytes = radio_rx_buffer_status.pld_len_in_bytes;
+    }
+
+    return status;
+}
+ral_status_t ral_lr11xx_get_data_rx_buffer( const void* context, uint8_t* buffer, uint16_t size_in_bytes )
+{
+    ral_status_t                    status                 = RAL_STATUS_ERROR;
+    lr11xx_radio_rx_buffer_status_t radio_rx_buffer_status = { 0 };
+
+    if( size_in_bytes > UINT8_MAX )
+    {
+        return RAL_STATUS_ERROR;
+    }
+
+    status = ( ral_status_t ) lr11xx_radio_get_rx_buffer_status( context, &radio_rx_buffer_status );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+
+    return ( ral_status_t ) lr11xx_regmem_read_buffer8( context, buffer, radio_rx_buffer_status.buffer_start_pointer,
+                                                        size_in_bytes );
+}
+ral_status_t ral_lr11xx_clear_rx_fifo( const void* context )
+{
+    ( void ) context;  // Unused parameter
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+ral_status_t ral_lr11xx_clear_tx_fifo( const void* context )
+{
+    ( void ) context;  // Unused parameter
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+ral_status_t ral_lr11xx_get_tx_fifo_level( const void* context, uint16_t* fifo_level )
+{
+    ( void ) context;     // Unused parameter
+    ( void ) fifo_level;  // Unused parameter
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+ral_status_t ral_lr11xx_get_rx_fifo_level( const void* context, uint16_t* fifo_level )
+{
+    ( void ) context;     // Unused parameter
+    ( void ) fifo_level;  // Unused parameter
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+ral_status_t ral_lr11xx_cfg_fifo_irq( const void* context, ral_radio_fifo_flag_t rx_fifo_irq_enable,
+                                      ral_radio_fifo_flag_t tx_fifo_irq_enable, uint16_t rx_fifo_high_threshold,
+                                      uint16_t tx_fifo_low_threshold, uint16_t rx_fifo_low_threshold,
+                                      uint16_t tx_fifo_high_threshold )
+{
+    ( void ) context;                 // Unused parameter
+    ( void ) rx_fifo_irq_enable;      // Unused parameter
+    ( void ) tx_fifo_irq_enable;      // Unused parameter
+    ( void ) rx_fifo_high_threshold;  // Unused parameter
+    ( void ) tx_fifo_low_threshold;   // Unused parameter
+    ( void ) rx_fifo_low_threshold;   // Unused parameter
+    ( void ) tx_fifo_high_threshold;  // Unused parameter
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+ral_status_t ral_lr11xx_get_fifo_irq( const void* context, ral_radio_fifo_flag_t* rx_fifo_flags,
+                                      ral_radio_fifo_flag_t* tx_fifo_flags )
+{
+    ( void ) context;        // Unused parameter
+    ( void ) rx_fifo_flags;  // Unused parameter
+    ( void ) tx_fifo_flags;  // Unused parameter
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+ral_status_t ral_lr11xx_clear_fifo_irq( const void* context, ral_radio_fifo_flag_t rx_fifo_flags_to_clear,
+                                        ral_radio_fifo_flag_t tx_fifo_flags_to_clear )
+{
+    ( void ) context;                 // Unused parameter
+    ( void ) rx_fifo_flags_to_clear;  // Unused parameter
+    ( void ) tx_fifo_flags_to_clear;  // Unused parameter
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+ral_status_t ral_lr11xx_get_and_clear_fifo_irq( const void* context, ral_radio_fifo_flag_t* rx_fifo_flags,
+                                                ral_radio_fifo_flag_t* tx_fifo_flags )
+{
+    ( void ) context;        // Unused parameter
+    ( void ) rx_fifo_flags;  // Unused parameter
+    ( void ) tx_fifo_flags;  // Unused parameter
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+
 ral_status_t ral_lr11xx_get_irq_status( const void* context, ral_irq_t* irq )
 {
     ral_status_t             status         = RAL_STATUS_ERROR;
@@ -666,6 +764,14 @@ ral_status_t ral_lr11xx_set_flrc_mod_params( const void* context, const ral_flrc
 
 ral_status_t ral_lr11xx_set_flrc_pkt_params( const void* context, const ral_flrc_pkt_params_t* params )
 {
+    return RAL_STATUS_UNSUPPORTED_FEATURE;
+}
+
+ral_status_t ral_lr11xx_set_flrc_long_preamble_len_in_bits( const void* context, uint16_t preamble_len_in_bits )
+{
+    ( void ) context;
+    ( void ) preamble_len_in_bits;
+
     return RAL_STATUS_UNSUPPORTED_FEATURE;
 }
 
