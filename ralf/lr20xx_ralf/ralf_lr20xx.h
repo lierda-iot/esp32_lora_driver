@@ -58,6 +58,7 @@ extern "C" {
     {                                                                                       \
         .setup_gfsk = ralf_lr20xx_setup_gfsk, .setup_lora = ralf_lr20xx_setup_lora,         \
         .setup_flrc = ralf_lr20xx_setup_flrc, .setup_lora_cad = ralf_lr20xx_setup_lora_cad, \
+        .setup_ook = ralf_lr20xx_setup_ook,                                                 \
     }
 
 #define RALF_LR20XX_INSTANTIATE( ctx )                                                 \
@@ -99,6 +100,11 @@ ral_status_t ralf_lr20xx_setup_flrc( const ralf_t* radio, const ralf_params_flrc
  * @see ralf_setup_lora_cad
  */
 ral_status_t ralf_lr20xx_setup_lora_cad( const ralf_t* radio, const ralf_params_lora_cad_t* params );
+
+/**
+ * @see ralf_setup_ook
+ */
+ral_status_t ralf_lr20xx_setup_ook( const ralf_t* radio, const ralf_params_ook_t* params );
 
 #ifdef __cplusplus
 }

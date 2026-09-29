@@ -391,8 +391,8 @@ void ral_lr20xx_bsp_get_front_end_calibration_cfg(
     lr20xx_radio_common_rx_path_boost_mode_t boost_mode = LR20XX_RADIO_COMMON_RX_PATH_BOOST_MODE_NONE;
 
     uint32_t freq_in_hz[3] = {
-        870000000,   // Frequency 0 (range from 850MHz to 890MHz) +/- 20MHz
-        920000000,   // Frequency 1 (range from 900MHz to 940MHz) +/- 20MHz
+        470000000,   // Frequency 0 (range from 450MHz to 490MHz) +/- 20MHz
+        897500000,   // Frequency 1 (range from 877.5MHz to 917.5MHz) +/- 20MHz
         2441000000,  // Frequency 2 (range from 2.391GHz to 2.491GHz) +/- 50MHz
     };
 

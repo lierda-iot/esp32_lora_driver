@@ -67,6 +67,7 @@ typedef ral_status_t ( *ralf_setup_gfsk_f )( const ralf_t* radio, const ralf_par
 typedef ral_status_t ( *ralf_setup_lora_f )( const ralf_t* radio, const ralf_params_lora_t* params );
 typedef ral_status_t ( *ralf_setup_flrc_f )( const ralf_t* radio, const ralf_params_flrc_t* params );
 typedef ral_status_t ( *ralf_setup_lora_cad_f )( const ralf_t* radio, const ralf_params_lora_cad_t* params );
+typedef ral_status_t ( *ralf_setup_ook_f )( const ralf_t* radio, const ralf_params_ook_t* params );
 
 typedef struct ralf_drv_s
 {
@@ -74,6 +75,7 @@ typedef struct ralf_drv_s
     ralf_setup_lora_f     setup_lora;
     ralf_setup_flrc_f     setup_flrc;
     ralf_setup_lora_cad_f setup_lora_cad;
+    ralf_setup_ook_f      setup_ook;  //!< LR20xx only, NULL for the other radios
 } ralf_drv_t;
 
 /*

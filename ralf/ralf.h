@@ -46,6 +46,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "ral.h"
 #include "ralf_defs.h"
 #include "ralf_drv.h"
@@ -128,6 +129,25 @@ static inline ral_status_t ralf_setup_flrc( const ralf_t* radio, const ralf_para
 static inline ral_status_t ralf_setup_lora_cad( const ralf_t* radio, const ralf_params_lora_cad_t* params )
 {
     return radio->ralf_drv.setup_lora_cad( radio, params );
+}
+
+/**
+ * Setup radio to transmit and receive data using the OOK modem
+ *
+ * @remark OOK is only available on LR20xx radios: other radios return RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio Pointer to radio data
+ * @param [in] params OOK modem transmission parameters
+ *
+ * @returns status Operation status
+ */
+static inline ral_status_t ralf_setup_ook( const ralf_t* radio, const ralf_params_ook_t* params )
+{
+    if( radio->ralf_drv.setup_ook == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->ralf_drv.setup_ook( radio, params );
 }
 
 /**

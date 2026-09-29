@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "lr20xx_pram_load.h"
+#include "lr20xx_patch.h"
 #include "lr20xx_system.h"
 #include "lr20xx_system_types.h"
 #include "lr20xx_radio_fifo.h"
@@ -49,6 +50,7 @@
 #include "lr20xx_radio_lora.h"
 #include "lr20xx_radio_fsk.h"
 #include "lr20xx_radio_flrc.h"
+#include "lr20xx_radio_ook.h"
 #include "lr20xx_radio_lr_fhss.h"
 #include "lr20xx_regmem.h"
 #include "lr20xx_rttof.h"
@@ -69,6 +71,32 @@ static const char *TAG = "RAL_LR20XX";
  * --- PRIVATE CONSTANTS -------------------------------------------------------
  */
 
+/**
+ * @brief System calibration run at initialisation when the radio uses a TCXO (0x6F): LF RC, HF RC, PLL, AAF, measure
+ * unit and PA offset
+ */
+#define RAL_LR20XX_BOOT_CALIBRATION_MASK                                                                        \
+    ( ( lr20xx_system_calibration_mask_t ) ( LR20XX_SYSTEM_CALIB_LF_RC_MASK | LR20XX_SYSTEM_CALIB_HF_RC_MASK |  \
+                                             LR20XX_SYSTEM_CALIB_PLL_MASK | LR20XX_SYSTEM_CALIB_AAF_MASK |      \
+                                             LR20XX_SYSTEM_CALIB_MU_MASK | LR20XX_SYSTEM_CALIB_PA_OFF_MASK ) )
+
+/**
+ * @brief Calibration run by ral_lr20xx_set_rf_freq when the frequency moved by more than
+ * RAL_LR20XX_PLL_AAF_CALIBRATION_FREQ_DELTA_HZ since the last one
+ */
+#define RAL_LR20XX_RUNTIME_PLL_AAF_CALIBRATION_MASK \
+    ( ( lr20xx_system_calibration_mask_t ) ( LR20XX_SYSTEM_CALIB_PLL_MASK | LR20XX_SYSTEM_CALIB_AAF_MASK ) )
+
+/**
+ * @brief Frequency change above which the PLL and AAF are calibrated again [Hz]
+ */
+#define RAL_LR20XX_PLL_AAF_CALIBRATION_FREQ_DELTA_HZ UINT32_C( 50000000 )
+
+/**
+ * @brief Frequency change above which the front end is calibrated again [Hz]
+ */
+#define RAL_LR20XX_FE_CALIBRATION_FREQ_DELTA_HZ UINT32_C( 10000000 )
+
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE TYPES -----------------------------------------------------------
@@ -78,6 +106,20 @@ static const char *TAG = "RAL_LR20XX";
  * -----------------------------------------------------------------------------
  * --- PRIVATE VARIABLES -------------------------------------------------------
  */
+
+/**
+ * @brief RF frequency of the last successful PLL/AAF calibration [Hz], 0 after a reset or an initialisation
+ *
+ * @remark The driver handles a single LR20xx radio. With several radios, this value and
+ * ral_lr20xx_last_fe_cal_freq_hz have to move to the radio context.
+ */
+static uint32_t ral_lr20xx_last_pll_aaf_cal_freq_hz = 0;
+
+/**
+ * @brief RF frequency of the last successful single-point front-end calibration [Hz], 0 after a reset or an
+ * initialisation
+ */
+static uint32_t ral_lr20xx_last_fe_cal_freq_hz = 0;
 
 /*
  * -----------------------------------------------------------------------------
@@ -209,6 +251,24 @@ static ral_status_t ral_lr20xx_convert_flrc_pkt_params_from_ral( const ral_flrc_
                                                                  lr20xx_radio_flrc_pkt_params_t* radio_pkt_params );
 
 /**
+ * @brief Convert OOK modulation parameters from RAL context to LR20xx context
+ *
+ * @param [in] ral_mod_params     RAL modulation parameters
+ * @param [out] radio_mod_params  Radio modulation parameters
+ */
+static ral_status_t ral_lr20xx_convert_ook_mod_params_from_ral( const ral_ook_mod_params_t*    ral_mod_params,
+                                                                lr20xx_radio_ook_mod_params_t* radio_mod_params );
+
+/**
+ * @brief Convert OOK packet parameters from RAL context to LR20xx context
+ *
+ * @param [in] ral_pkt_params     RAL packet parameters
+ * @param [out] radio_pkt_params  Radio packet parameters
+ */
+static ral_status_t ral_lr20xx_convert_ook_pkt_params_from_ral( const ral_ook_pkt_params_t*    ral_pkt_params,
+                                                                lr20xx_radio_ook_pkt_params_t* radio_pkt_params );
+
+/**
  * @brief Load and enable LR20xx PRAM
  *
  * The behavior of this function is compile definition dependent. It needs to have either LR2012, LR2021 or LR2022
@@ -228,6 +288,10 @@ bool ral_lr20xx_handles_part( const char* part_number )
 
 ral_status_t ral_lr20xx_reset( const void* context )
 {
+    // The reset clears the calibrations: the next ral_lr20xx_set_rf_freq call runs them again
+    ral_lr20xx_last_pll_aaf_cal_freq_hz = 0;
+    ral_lr20xx_last_fe_cal_freq_hz      = 0;
+
     return ( ral_status_t ) lr20xx_system_reset( context );
 }
 
@@ -240,12 +304,36 @@ ral_status_t ral_lr20xx_init( const void* context )
 {
     ral_status_t status = RAL_STATUS_ERROR;
 
-    lr20xx_system_init( context );
+    ral_lr20xx_last_pll_aaf_cal_freq_hz = 0;
+    ral_lr20xx_last_fe_cal_freq_hz      = 0;
+
+    status = ( ral_status_t ) lr20xx_system_init( context );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
 
     status = ral_lr20xx_load_pram( context );
     if( status != RAL_STATUS_OK )
     {
         return status;
+    }
+
+    lr20xx_patch_version_t pram_version = { 0 };
+    status = ( ral_status_t ) lr20xx_patch_get_version( context, &pram_version );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+    
+    ESP_LOGI(TAG,"LR20xx PRAM loaded=%d, type=%u, version=%u\r\n",
+          pram_version.is_pram_loaded,
+          pram_version.pram_type,
+          pram_version.pram_version );
+
+    if( pram_version.is_pram_loaded == false )
+    {
+        return RAL_STATUS_ERROR;
     }
 
     lr20xx_system_reg_mode_t reg_mode;
@@ -301,6 +389,33 @@ ral_status_t ral_lr20xx_init( const void* context )
         // }
     }
 
+    // Start the reference clock and check that it runs
+    status = ( ral_status_t ) lr20xx_system_set_standby_mode( context, LR20XX_SYSTEM_STANDBY_MODE_XOSC );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+
+    if( xosc_cfg == RAL_XOSC_CFG_TCXO_RADIO_CTRL )
+    {
+        // With a TCXO, calibrate again the blocks that depend on the reference clock now that it runs
+        status = ( ral_status_t ) lr20xx_system_clear_errors( context );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+        status = ( ral_status_t ) lr20xx_system_calibrate( context, RAL_LR20XX_BOOT_CALIBRATION_MASK );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+        status = ( ral_status_t ) lr20xx_system_set_standby_mode( context, LR20XX_SYSTEM_STANDBY_MODE_XOSC );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+    }
+
     lr20xx_system_lfclk_cfg_t lfclk_cfg;
     ral_bsp_lr20xx_get_lfclk_cfg( context, &lfclk_cfg );
     status = ( ral_status_t ) lr20xx_system_cfg_lfclk( context, lfclk_cfg );
@@ -309,11 +424,27 @@ ral_status_t ral_lr20xx_init( const void* context )
         return status;
     }
 
-    uint16_t errors;
-    lr20xx_system_get_errors( context, &errors );
+    lr20xx_system_errors_t errors = 0;
+    status = ( ral_status_t ) lr20xx_system_get_errors( context, &errors );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
     if( errors != 0 )
     {
-        lr20xx_system_clear_errors( context );
+        ESP_LOGW( TAG, "LR20xx system errors at initialisation: 0x%04X", errors );
+        status = ( ral_status_t ) lr20xx_system_clear_errors( context );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+    }
+
+    // Drop the IRQs left from before the initialisation before the DIOs are configured
+    status = ( ral_status_t ) lr20xx_system_clear_irq_status( context, LR20XX_SYSTEM_IRQ_ALL_MASK );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
     }
 
     uint8_t dio_count = lr20xx_system_dio_get_count( );
@@ -567,10 +698,19 @@ ral_status_t ral_lr20xx_set_tx_infinite_preamble( const void* context )
 
 ral_status_t ral_lr20xx_cal_img( const void* context, const uint16_t freq1_in_mhz, const uint16_t freq2_in_mhz )
 {
-    const lr20xx_radio_common_front_end_calibration_value_t image_calibration_structures[2] = {
+    lr20xx_radio_common_front_end_calibration_value_t image_calibration_structures[2] = {
         { .rx_path = LR20XX_RADIO_COMMON_RX_PATH_LF, .frequency_in_hertz = freq1_in_mhz * 1e6 },
         { .rx_path = LR20XX_RADIO_COMMON_RX_PATH_LF, .frequency_in_hertz = freq2_in_mhz * 1e6 }
     };
+
+    // Calibrate each point on the RX path the BSP selects for its frequency (HF for 2.4 GHz), as the initialisation
+    // and ral_lr20xx_set_rf_freq() do
+    for( uint8_t i = 0; i < 2; i++ )
+    {
+        lr20xx_radio_common_rx_path_boost_mode_t boost_mode = LR20XX_RADIO_COMMON_RX_PATH_BOOST_MODE_NONE;
+        ral_lr20xx_bsp_get_rx_cfg( context, image_calibration_structures[i].frequency_in_hertz,
+                                   &image_calibration_structures[i].rx_path, &boost_mode );
+    }
     return ( ral_status_t ) lr20xx_radio_common_calibrate_front_end_helper( context, image_calibration_structures, 2 );
 }
 
@@ -832,12 +972,60 @@ ral_status_t ral_lr20xx_set_dio_irq_params( const void* context, const ral_irq_t
 
 ral_status_t ral_lr20xx_set_rf_freq( const void* context, const uint32_t freq_in_hz )
 {
-    lr20xx_radio_common_set_rf_freq( context, freq_in_hz );
-
     lr20xx_radio_common_rx_path_t            rx_path    = LR20XX_RADIO_COMMON_RX_PATH_LF;
     lr20xx_radio_common_rx_path_boost_mode_t boost_mode = LR20XX_RADIO_COMMON_RX_PATH_BOOST_MODE_NONE;
 
     ral_lr20xx_bsp_get_rx_cfg( context, freq_in_hz, &rx_path, &boost_mode );
+
+    const uint32_t pll_aaf_freq_delta_hz = ( freq_in_hz >= ral_lr20xx_last_pll_aaf_cal_freq_hz )
+                                               ? ( freq_in_hz - ral_lr20xx_last_pll_aaf_cal_freq_hz )
+                                               : ( ral_lr20xx_last_pll_aaf_cal_freq_hz - freq_in_hz );
+    const uint32_t fe_freq_delta_hz = ( freq_in_hz >= ral_lr20xx_last_fe_cal_freq_hz )
+                                          ? ( freq_in_hz - ral_lr20xx_last_fe_cal_freq_hz )
+                                          : ( ral_lr20xx_last_fe_cal_freq_hz - freq_in_hz );
+
+    ral_status_t status =
+        ( ral_status_t ) lr20xx_system_set_standby_mode( context, LR20XX_SYSTEM_STANDBY_MODE_XOSC );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+
+    status = ( ral_status_t ) lr20xx_radio_common_set_rf_freq( context, freq_in_hz );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+
+    if( pll_aaf_freq_delta_hz > RAL_LR20XX_PLL_AAF_CALIBRATION_FREQ_DELTA_HZ )
+    {
+        status = ( ral_status_t ) lr20xx_system_calibrate( context, RAL_LR20XX_RUNTIME_PLL_AAF_CALIBRATION_MASK );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+        status = ( ral_status_t ) lr20xx_system_set_standby_mode( context, LR20XX_SYSTEM_STANDBY_MODE_XOSC );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+        ral_lr20xx_last_pll_aaf_cal_freq_hz = freq_in_hz;
+    }
+
+    if( fe_freq_delta_hz > RAL_LR20XX_FE_CALIBRATION_FREQ_DELTA_HZ )
+    {
+        const lr20xx_radio_common_front_end_calibration_value_t calibration = {
+            .frequency_in_hertz = freq_in_hz,
+            .rx_path            = rx_path,
+        };
+
+        status = ( ral_status_t ) lr20xx_radio_common_calibrate_front_end_helper( context, &calibration, 1 );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+        ral_lr20xx_last_fe_cal_freq_hz = freq_in_hz;
+    }
 
     return ( ral_status_t ) lr20xx_radio_common_set_rx_path( context, rx_path, boost_mode );
 }
@@ -866,6 +1054,11 @@ ral_status_t ral_lr20xx_set_pkt_type( const void* context, const ral_pkt_type_t 
     case RAL_PKT_TYPE_RTTOF:
     {
         radio_pkt_type = LR20XX_RADIO_COMMON_PKT_TYPE_RTTOF;
+        break;
+    }
+    case RAL_PKT_TYPE_OOK:
+    {
+        radio_pkt_type = LR20XX_RADIO_COMMON_PKT_TYPE_OOK;
         break;
     }
     default:
@@ -900,6 +1093,11 @@ ral_status_t ral_lr20xx_get_pkt_type( const void* context, ral_pkt_type_t* pkt_t
         case LR20XX_RADIO_COMMON_PKT_TYPE_FLRC:
         {
             *pkt_type = RAL_PKT_TYPE_FLRC;
+            break;
+        }
+        case LR20XX_RADIO_COMMON_PKT_TYPE_OOK:
+        {
+            *pkt_type = RAL_PKT_TYPE_OOK;
             break;
         }
         default:
@@ -1414,6 +1612,172 @@ ral_status_t ral_lr20xx_set_flrc_crc_params( const void* context, const uint32_t
     return ( ral_status_t ) lr20xx_radio_fsk_set_crc_params( context, polynomial, seed );
 }
 
+ral_status_t ral_lr20xx_set_ook_mod_params( const void* context, const ral_ook_mod_params_t* params )
+{
+    lr20xx_radio_ook_mod_params_t radio_mod_params = { 0 };
+
+    const ral_status_t status = ral_lr20xx_convert_ook_mod_params_from_ral( params, &radio_mod_params );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+
+    return ( ral_status_t ) lr20xx_radio_ook_set_modulation_params( context, &radio_mod_params );
+}
+
+ral_status_t ral_lr20xx_set_ook_pkt_params( const void* context, const ral_ook_pkt_params_t* params )
+{
+    lr20xx_radio_ook_pkt_params_t radio_pkt_params = { 0 };
+
+    const ral_status_t status = ral_lr20xx_convert_ook_pkt_params_from_ral( params, &radio_pkt_params );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+
+    return ( ral_status_t ) lr20xx_radio_ook_set_packet_params( context, &radio_pkt_params );
+}
+
+ral_status_t ral_lr20xx_set_ook_rx_detector( const void* context, const ral_ook_rx_detector_t* params )
+{
+    lr20xx_radio_ook_rx_detector_sfd_type_t sfd_type;
+
+    switch( params->sfd_type )
+    {
+    case RAL_OOK_SFD_FALLING_EDGE:
+    {
+        sfd_type = LR20XX_RADIO_OOK_RX_DETECTOR_SFD_TYPE_FALLING_EDGE;
+        break;
+    }
+    case RAL_OOK_SFD_RISING_EDGE:
+    {
+        sfd_type = LR20XX_RADIO_OOK_RX_DETECTOR_SFD_TYPE_RISING_EDGE;
+        break;
+    }
+    default:
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+    }
+
+    if( ( params->pattern_len_in_bits < 1 ) || ( params->pattern_len_in_bits > 16 ) ||
+        ( params->pattern_repeat_nb > 31 ) || ( params->sfd_len_in_bits > 15 ) )
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+
+    const lr20xx_radio_ook_rx_detector_t rx_detector = {
+        .pattern               = params->pattern,
+        .pattern_length_in_bit = params->pattern_len_in_bits - 1,  // The radio expects the length minus one
+        .pattern_repeat_nb     = params->pattern_repeat_nb,
+        .sfd_type              = sfd_type,
+        .sfd_length_in_bit     = params->sfd_len_in_bits,
+        .is_syncword_encoded   = params->is_sync_word_encoded,
+    };
+
+    return ( ral_status_t ) lr20xx_radio_ook_set_rx_detector( context, &rx_detector );
+}
+
+ral_status_t ral_lr20xx_set_ook_sync_word( const void* context, const uint8_t* sync_word,
+                                           const uint8_t                       sync_word_len_in_bits,
+                                           const ral_ook_sync_word_bit_order_t bit_order )
+{
+    lr20xx_radio_ook_syncword_bit_order_t radio_bit_order;
+
+    switch( bit_order )
+    {
+    case RAL_OOK_SYNC_WORD_LSB_FIRST:
+    {
+        radio_bit_order = LR20XX_RADIO_OOK_SYNCWORD_LSBF;
+        break;
+    }
+    case RAL_OOK_SYNC_WORD_MSB_FIRST:
+    {
+        radio_bit_order = LR20XX_RADIO_OOK_SYNCWORD_MSBF;
+        break;
+    }
+    default:
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+    }
+
+    if( ( sync_word == NULL ) || ( sync_word_len_in_bits > ( LR20XX_RADIO_OOK_SYNCWORD_LENGTH * 8 ) ) )
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+
+    return ( ral_status_t ) lr20xx_radio_ook_set_syncword( context, sync_word, sync_word_len_in_bits, radio_bit_order );
+}
+
+ral_status_t ral_lr20xx_set_ook_crc_params( const void* context, const uint32_t seed, const uint32_t polynomial )
+{
+    return ( ral_status_t ) lr20xx_radio_ook_set_crc_params( context, polynomial, seed );
+}
+
+ral_status_t ral_lr20xx_set_ook_pkt_address( const void* context, const uint8_t node_address,
+                                             const uint8_t broadcast_address )
+{
+    return ( ral_status_t ) lr20xx_radio_ook_set_addresses( context, node_address, broadcast_address );
+}
+
+ral_status_t ral_lr20xx_set_ook_whitening_params( const void* context, const uint8_t bit_index,
+                                                  const uint16_t polynomial, const uint16_t seed )
+{
+    if( ( bit_index > 15 ) || ( polynomial > 0x0FFF ) || ( seed > 0x0FFF ) )
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+
+    const lr20xx_radio_ook_whitening_params_t whitening_params = {
+        .bit_index  = bit_index,
+        .polynomial = polynomial,
+        .seed       = seed,
+    };
+
+    return ( ral_status_t ) lr20xx_radio_ook_set_whitening_params( context, &whitening_params );
+}
+
+ral_status_t ral_lr20xx_get_ook_rx_pkt_status( const void* context, ral_ook_rx_pkt_status_t* rx_pkt_status )
+{
+    lr20xx_radio_ook_packet_status_t radio_status = { 0 };
+
+    const ral_status_t status = ( ral_status_t ) lr20xx_radio_ook_get_packet_status( context, &radio_status );
+
+    if( status == RAL_STATUS_OK )
+    {
+        rx_pkt_status->packet_length_bytes     = radio_status.packet_length_bytes;
+        rx_pkt_status->rssi_avg_in_dbm         = radio_status.rssi_avg_in_dbm;
+        rx_pkt_status->rssi_avg_half_dbm_count = radio_status.rssi_avg_half_dbm_count;
+        rx_pkt_status->rssi_on_in_dbm          = radio_status.rssi_on_in_dbm;
+        rx_pkt_status->rssi_on_half_dbm_count  = radio_status.rssi_on_half_dbm_count;
+        rx_pkt_status->is_addr_match_broadcast = radio_status.is_addr_match_broadcast;
+        rx_pkt_status->is_addr_match_node      = radio_status.is_addr_match_node;
+        rx_pkt_status->link_quality_indicator  = radio_status.link_quality_indicator;
+    }
+    return status;
+}
+
+uint32_t ral_lr20xx_get_ook_time_on_air_in_ms( const ral_ook_pkt_params_t* pkt_p, const ral_ook_mod_params_t* mod_p )
+{
+    lr20xx_radio_ook_pkt_params_t radio_pkt_params = { 0 };
+    lr20xx_radio_ook_mod_params_t radio_mod_params = { 0 };
+
+    // The time on air is divided by the bit rate
+    if( mod_p->br_in_bps == 0 )
+    {
+        return 0;
+    }
+
+    if( ( ral_lr20xx_convert_ook_pkt_params_from_ral( pkt_p, &radio_pkt_params ) != RAL_STATUS_OK ) ||
+        ( ral_lr20xx_convert_ook_mod_params_from_ral( mod_p, &radio_mod_params ) != RAL_STATUS_OK ) )
+    {
+        return 0;
+    }
+
+    return lr20xx_radio_ook_get_time_on_air_in_ms( &radio_pkt_params, &radio_mod_params, pkt_p->sync_word_len_in_bits );
+}
+
 ral_status_t ral_lr20xx_set_gfsk_whitening_seed( const void* context, const uint16_t seed )
 {
     return ( ral_status_t ) lr20xx_radio_fsk_set_whitening_params(
@@ -1703,6 +2067,10 @@ ral_irq_t ral_lr20xx_convert_irq_flags_to_ral( lr20xx_system_irq_mask_t lr20xx_i
     {
         ral_irq |= RAL_IRQ_RX_CRC_ERROR;
     }
+    if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_LEN_ERROR ) != 0 )
+    {
+        ral_irq |= RAL_IRQ_RX_LEN_ERROR;
+    }
     if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_CAD_DONE ) != 0 )
     {
         ral_irq |= RAL_IRQ_CAD_DONE;
@@ -1755,6 +2123,34 @@ ral_irq_t ral_lr20xx_convert_irq_flags_to_ral( lr20xx_system_irq_mask_t lr20xx_i
     {
         ral_irq |= RAL_IRQ_TX_TIMESTAMP;
     }
+    if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_RTTOF_RESPONDER_REQUEST_VALID ) != 0 )
+    {
+        ral_irq |= RAL_IRQ_RTTOF_REQ_VALID;
+    }
+    if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_ADDR_ERROR ) != 0 )
+    {
+        ral_irq |= RAL_IRQ_RX_ADDR_ERROR;
+    }
+    if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_LORA_RX_HEADER_TIMESTAMP ) != 0 )
+    {
+        ral_irq |= RAL_IRQ_RX_HDR_TIMESTAMP;
+    }
+    if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_LOW_BATTERY ) != 0 )
+    {
+        ral_irq |= RAL_IRQ_LOW_BATTERY;
+    }
+    if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_PA_OVP_OCP ) != 0 )
+    {
+        ral_irq |= RAL_IRQ_PA_OVP_OCP;
+    }
+    if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_LR_FHSS_RDY_FOR_NEW_FREQ_TABLE ) != 0 )
+    {
+        ral_irq |= RAL_IRQ_LR_FHSS_NEW_TABLE;
+    }
+    if( ( lr20xx_irq_status & LR20XX_SYSTEM_IRQ_LR_FHSS_RDY_FOR_NEW_PAYLOAD ) != 0 )
+    {
+        ral_irq |= RAL_IRQ_LR_FHSS_NEW_PAYLOAD;
+    }
 
     return ral_irq;
 }
@@ -1790,6 +2186,10 @@ lr20xx_system_irq_mask_t ral_lr20xx_convert_irq_flags_from_ral( ral_irq_t ral_ir
     if( ( ral_irq & RAL_IRQ_RX_CRC_ERROR ) != 0 )
     {
         lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_CRC_ERROR;
+    }
+    if( ( ral_irq & RAL_IRQ_RX_LEN_ERROR ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_LEN_ERROR;
     }
     if( ( ral_irq & RAL_IRQ_CAD_DONE ) != 0 )
     {
@@ -1834,6 +2234,42 @@ lr20xx_system_irq_mask_t ral_lr20xx_convert_irq_flags_from_ral( ral_irq_t ral_ir
     if( ( ral_irq & RAL_IRQ_TX_TIMESTAMP ) != 0 )
     {
         lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_TX_TIMESTAMP;
+    }
+    if( ( ral_irq & RAL_IRQ_CMD_ERROR ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_CMD_ERROR;
+    }
+    if( ( ral_irq & RAL_IRQ_ERROR ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_ERROR;
+    }
+    if( ( ral_irq & RAL_IRQ_RTTOF_REQ_VALID ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_RTTOF_RESPONDER_REQUEST_VALID;
+    }
+    if( ( ral_irq & RAL_IRQ_RX_ADDR_ERROR ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_ADDR_ERROR;
+    }
+    if( ( ral_irq & RAL_IRQ_RX_HDR_TIMESTAMP ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_LORA_RX_HEADER_TIMESTAMP;
+    }
+    if( ( ral_irq & RAL_IRQ_LOW_BATTERY ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_LOW_BATTERY;
+    }
+    if( ( ral_irq & RAL_IRQ_PA_OVP_OCP ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_PA_OVP_OCP;
+    }
+    if( ( ral_irq & RAL_IRQ_LR_FHSS_NEW_TABLE ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_LR_FHSS_RDY_FOR_NEW_FREQ_TABLE;
+    }
+    if( ( ral_irq & RAL_IRQ_LR_FHSS_NEW_PAYLOAD ) != 0 )
+    {
+        lr20xx_irq_status |= LR20XX_SYSTEM_IRQ_LR_FHSS_RDY_FOR_NEW_PAYLOAD;
     }
 
     return lr20xx_irq_status;
@@ -2481,6 +2917,207 @@ ral_status_t ral_lr20xx_rttof_get_raw_result( const void* context, ral_lora_bw_t
     *raw_results   = results.val;
     *rssi_result   = results.rssi;
     *meter_results = lr20xx_rttof_distance_raw_to_meter( radio_mod_params.bw, results.val );
+
+    return RAL_STATUS_OK;
+}
+
+static ral_status_t ral_lr20xx_convert_ook_mod_params_from_ral( const ral_ook_mod_params_t*    ral_mod_params,
+                                                                lr20xx_radio_ook_mod_params_t* radio_mod_params )
+{
+    lr20xx_radio_fsk_common_bw_t bw_dsb_param;
+
+    // OOK uses the same receiver bandwidth settings as FSK
+    const ral_status_t status =
+        ( ral_status_t ) lr20xx_radio_fsk_get_rx_bandwidth( ral_mod_params->bw_dsb_in_hz, &bw_dsb_param );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+
+    radio_mod_params->br = ral_mod_params->br_in_bps;
+    radio_mod_params->bw = bw_dsb_param;
+
+    switch( ral_mod_params->pulse_shape )
+    {
+    case RAL_OOK_PULSE_SHAPE_OFF:
+    {
+        radio_mod_params->pulse_shape = LR20XX_RADIO_OOK_PULSE_SHAPE_OFF;
+        break;
+    }
+    case RAL_OOK_PULSE_SHAPE_BT_05:
+    {
+        radio_mod_params->pulse_shape = LR20XX_RADIO_OOK_PULSE_SHAPE_BT_05;
+        break;
+    }
+    case RAL_OOK_PULSE_SHAPE_BT_1:
+    {
+        radio_mod_params->pulse_shape = LR20XX_RADIO_OOK_PULSE_SHAPE_BT_1;
+        break;
+    }
+    default:
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+    }
+
+    switch( ral_mod_params->mag_depth )
+    {
+    case RAL_OOK_MAG_DEPTH_FULL:
+    {
+        radio_mod_params->mag_depth = LR20XX_RADIO_OOK_MAG_DEPTH_FULL;
+        break;
+    }
+    case RAL_OOK_MAG_DEPTH_UP_TO_20DB:
+    {
+        radio_mod_params->mag_depth = LR20XX_RADIO_OOK_MAG_DEPTH_UP_TO_20DB;
+        break;
+    }
+    default:
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+    }
+
+    return RAL_STATUS_OK;
+}
+
+static ral_status_t ral_lr20xx_convert_ook_pkt_params_from_ral( const ral_ook_pkt_params_t*    ral_pkt_params,
+                                                                lr20xx_radio_ook_pkt_params_t* radio_pkt_params )
+{
+    radio_pkt_params->pbl_length_in_bit = ral_pkt_params->preamble_len_in_bits;
+    radio_pkt_params->payload_length    = ral_pkt_params->pld_len_in_bytes;
+
+    switch( ral_pkt_params->address_filtering )
+    {
+    case RAL_OOK_ADDRESS_FILTERING_DISABLE:
+    {
+        radio_pkt_params->address_filtering = LR20XX_RADIO_OOK_ADDRESS_FILTERING_DISABLED;
+        break;
+    }
+    case RAL_OOK_ADDRESS_FILTERING_NODE_ADDRESS:
+    {
+        radio_pkt_params->address_filtering = LR20XX_RADIO_OOK_ADDRESS_FILTERING_NODE;
+        break;
+    }
+    case RAL_OOK_ADDRESS_FILTERING_NODE_AND_BROADCAST_ADDRESSES:
+    {
+        radio_pkt_params->address_filtering = LR20XX_RADIO_OOK_ADDRESS_FILTERING_NODE_BROADCAST;
+        break;
+    }
+    default:
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+    }
+
+    switch( ral_pkt_params->header_type )
+    {
+    case RAL_OOK_PKT_FIX_LEN:
+    {
+        radio_pkt_params->header_mode = LR20XX_RADIO_OOK_HEADER_IMPLICIT;
+        break;
+    }
+    case RAL_OOK_PKT_VAR_LEN:
+    {
+        radio_pkt_params->header_mode = LR20XX_RADIO_OOK_HEADER_EXPLICIT;
+        break;
+    }
+    case RAL_OOK_PKT_VAR_LEN_16_BITS:
+    {
+        radio_pkt_params->header_mode = LR20XX_RADIO_OOK_HEADER_16BITS;
+        break;
+    }
+    default:
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+    }
+
+    switch( ral_pkt_params->crc_type )
+    {
+    case RAL_OOK_CRC_OFF:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_OFF;
+        break;
+    }
+    case RAL_OOK_CRC_1_BYTE:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_1_BYTE;
+        break;
+    }
+    case RAL_OOK_CRC_2_BYTES:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_2_BYTES;
+        break;
+    }
+    case RAL_OOK_CRC_3_BYTES:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_3_BYTES;
+        break;
+    }
+    case RAL_OOK_CRC_4_BYTES:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_4_BYTES;
+        break;
+    }
+    case RAL_OOK_CRC_1_BYTE_INV:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_1_BYTE_INVERTED;
+        break;
+    }
+    case RAL_OOK_CRC_2_BYTES_INV:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_2_BYTES_INVERTED;
+        break;
+    }
+    case RAL_OOK_CRC_3_BYTES_INV:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_3_BYTES_INVERTED;
+        break;
+    }
+    case RAL_OOK_CRC_4_BYTES_INV:
+    {
+        radio_pkt_params->crc = LR20XX_RADIO_OOK_CRC_4_BYTES_INVERTED;
+        break;
+    }
+    default:
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+    }
+
+    switch( ral_pkt_params->encoding )
+    {
+    case RAL_OOK_ENCODING_OFF:
+    {
+        radio_pkt_params->encoding = LR20XX_RADIO_OOK_ENCODING_OFF;
+        break;
+    }
+    case RAL_OOK_ENCODING_MANCHESTER:
+    {
+        radio_pkt_params->encoding = LR20XX_RADIO_OOK_ENCODING_MANCHESTER;
+        break;
+    }
+    case RAL_OOK_ENCODING_MANCHESTER_INV:
+    {
+        radio_pkt_params->encoding = LR20XX_RADIO_OOK_ENCODING_MANCHESTER_INV;
+        break;
+    }
+    case RAL_OOK_ENCODING_BIPHASE_MARK:
+    {
+        radio_pkt_params->encoding = LR20XX_RADIO_OOK_ENCODING_BIPHASE_MARK;
+        break;
+    }
+    case RAL_OOK_ENCODING_BIPHASE_MARK_INV:
+    {
+        radio_pkt_params->encoding = LR20XX_RADIO_OOK_ENCODING_BIPHASE_MARK_INV;
+        break;
+    }
+    default:
+    {
+        return RAL_STATUS_UNKNOWN_VALUE;
+    }
+    }
 
     return RAL_STATUS_OK;
 }

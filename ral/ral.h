@@ -46,6 +46,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "ral_defs.h"
 #include "ral_drv.h"
 /*
@@ -854,6 +855,196 @@ static inline ral_status_t ral_set_gfsk_crc_params( const ral_t* radio, const ui
 static inline ral_status_t ral_set_flrc_crc_params( const ral_t* radio, const uint32_t seed, const uint32_t polynomial )
 {
     return radio->driver.set_flrc_crc_params( radio->context, seed, polynomial );
+}
+
+/**
+ * @brief Set the modulation parameters for OOK packets
+ *
+ * @remark The command @ref ral_set_pkt_type with @ref RAL_PKT_TYPE_OOK parameter must be called prior to this one.
+ * @remark OOK is only available on LR20xx radios: other radios return @ref RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio   Pointer to radio data structure
+ * @param [in] params  The structure of OOK modulation configuration
+ *
+ * @returns Operation status
+ */
+static inline ral_status_t ral_set_ook_mod_params( const ral_t* radio, const ral_ook_mod_params_t* params )
+{
+    if( radio->driver.set_ook_mod_params == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->driver.set_ook_mod_params( radio->context, params );
+}
+
+/**
+ * @brief Set the packet parameters for OOK packets
+ *
+ * @remark The command @ref ral_set_pkt_type with @ref RAL_PKT_TYPE_OOK parameter must be called prior to this one.
+ * @remark OOK is only available on LR20xx radios: other radios return @ref RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio   Pointer to radio data structure
+ * @param [in] params  The structure of OOK packet configuration
+ *
+ * @returns Operation status
+ */
+static inline ral_status_t ral_set_ook_pkt_params( const ral_t* radio, const ral_ook_pkt_params_t* params )
+{
+    if( radio->driver.set_ook_pkt_params == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->driver.set_ook_pkt_params( radio->context, params );
+}
+
+/**
+ * @brief Configure the receiver detector for OOK packets
+ *
+ * @remark The command @ref ral_set_pkt_type with @ref RAL_PKT_TYPE_OOK parameter must be called prior to this one.
+ * @remark OOK is only available on LR20xx radios: other radios return @ref RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio   Pointer to radio data structure
+ * @param [in] params  The structure of OOK receiver detector configuration
+ *
+ * @returns Operation status
+ */
+static inline ral_status_t ral_set_ook_rx_detector( const ral_t* radio, const ral_ook_rx_detector_t* params )
+{
+    if( radio->driver.set_ook_rx_detector == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->driver.set_ook_rx_detector( radio->context, params );
+}
+
+/**
+ * @brief Configure the sync word used in OOK packets
+ *
+ * @remark The sync word buffer holds 4 bytes, read as a 32-bit big-endian value: the sync_word_len_in_bits least significant bits are used, even when sync_word_len_in_bits is lower than 32.
+ * @remark OOK is only available on LR20xx radios: other radios return @ref RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio                  Pointer to radio data structure
+ * @param [in] sync_word              Buffer of 4 bytes holding the sync word
+ * @param [in] sync_word_len_in_bits  Sync word length in bits - in [0:32]
+ * @param [in] bit_order              Order in which the sync word bits are sent
+ *
+ * @returns Operation status
+ */
+static inline ral_status_t ral_set_ook_sync_word( const ral_t* radio, const uint8_t* sync_word,
+                                                  const uint8_t                       sync_word_len_in_bits,
+                                                  const ral_ook_sync_word_bit_order_t bit_order )
+{
+    if( radio->driver.set_ook_sync_word == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->driver.set_ook_sync_word( radio->context, sync_word, sync_word_len_in_bits, bit_order );
+}
+
+/**
+ * @brief Configure the seed and the polynomial used to compute the CRC of OOK packets
+ *
+ * @remark OOK is only available on LR20xx radios: other radios return @ref RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio       Pointer to radio data structure
+ * @param [in] seed        Seed value used to compute the CRC value
+ * @param [in] polynomial  Polynomial value used to compute the CRC value
+ *
+ * @returns Operation status
+ */
+static inline ral_status_t ral_set_ook_crc_params( const ral_t* radio, const uint32_t seed, const uint32_t polynomial )
+{
+    if( radio->driver.set_ook_crc_params == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->driver.set_ook_crc_params( radio->context, seed, polynomial );
+}
+
+/**
+ * @brief Configure the node and broadcast addresses used by the OOK address filtering
+ *
+ * @remark OOK is only available on LR20xx radios: other radios return @ref RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio              Pointer to radio data structure
+ * @param [in] node_address       Node address
+ * @param [in] broadcast_address  Broadcast address
+ *
+ * @returns Operation status
+ */
+static inline ral_status_t ral_set_ook_pkt_address( const ral_t* radio, const uint8_t node_address,
+                                                    const uint8_t broadcast_address )
+{
+    if( radio->driver.set_ook_pkt_address == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->driver.set_ook_pkt_address( radio->context, node_address, broadcast_address );
+}
+
+/**
+ * @brief Configure the whitening of OOK packets
+ *
+ * @remark A polynomial equal to 0 disables the whitening.
+ * @remark OOK is only available on LR20xx radios: other radios return @ref RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio       Pointer to radio data structure
+ * @param [in] bit_index   LFSR bit index - in [0:15]
+ * @param [in] polynomial  Whitening polynomial - 12-bit value
+ * @param [in] seed        Whitening seed - 12-bit value
+ *
+ * @returns Operation status
+ */
+static inline ral_status_t ral_set_ook_whitening_params( const ral_t* radio, const uint8_t bit_index,
+                                                         const uint16_t polynomial, const uint16_t seed )
+{
+    if( radio->driver.set_ook_whitening_params == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->driver.set_ook_whitening_params( radio->context, bit_index, polynomial, seed );
+}
+
+/**
+ * @brief Get the status of the last OOK packet received
+ *
+ * @remark OOK is only available on LR20xx radios: other radios return @ref RAL_STATUS_UNSUPPORTED_FEATURE.
+ *
+ * @param [in] radio           Pointer to radio data structure
+ * @param [out] rx_pkt_status  Pointer to a structure to store the packet status
+ *
+ * @returns Operation status
+ */
+static inline ral_status_t ral_get_ook_rx_pkt_status( const ral_t* radio, ral_ook_rx_pkt_status_t* rx_pkt_status )
+{
+    if( radio->driver.get_ook_rx_pkt_status == NULL )
+    {
+        return RAL_STATUS_UNSUPPORTED_FEATURE;
+    }
+    return radio->driver.get_ook_rx_pkt_status( radio->context, rx_pkt_status );
+}
+
+/**
+ * @brief Get the time on air in millisecond for OOK transmission
+ *
+ * @remark The sync word length is taken from pkt_p->sync_word_len_in_bits.
+ * @remark Returns 0 on radios without OOK, when the bit rate is 0, and for the configurations the LR20xx driver
+ * cannot compute: 16-bit length header (@ref RAL_OOK_PKT_VAR_LEN_16_BITS) and bi-phase mark encoding.
+ *
+ * @param [in] radio  Pointer to radio data structure
+ * @param [in] pkt_p  Pointer to a structure holding the OOK packet parameters
+ * @param [in] mod_p  Pointer to a structure holding the OOK modulation parameters
+ *
+ * @returns Time-on-air value in ms for OOK transmission
+ */
+static inline uint32_t ral_get_ook_time_on_air_in_ms( const ral_t* radio, const ral_ook_pkt_params_t* pkt_p,
+                                                      const ral_ook_mod_params_t* mod_p )
+{
+    if( radio->driver.get_ook_time_on_air_in_ms == NULL )
+    {
+        return 0;
+    }
+    return radio->driver.get_ook_time_on_air_in_ms( pkt_p, mod_p );
 }
 
 /**

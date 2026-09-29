@@ -364,6 +364,8 @@ void app_main(void)
 
 这些配置项定义见 [Kconfig](Kconfig)。
 
+没有连接 NRST 时，`LR2021_NRST_GPIO` 可以设为 `-1`。这时 `ral_reset()` 无法复位芯片，只保证在下一条命令前先唤醒芯片。建议连接 NRST：不接的话，只重启 ESP32 时芯片会保留原来的状态，包括已加载的 PRAM。
+
 如果你的硬件不是按 `L-LRMAM36-FANN4` 的默认连接方式设计，那么这里的参数应视为必须检查项，而不是可选项。
 
 ## 与 ESP-IDF 的集成方式
@@ -386,6 +388,10 @@ void app_main(void)
 如需参考该组件的使用方式、工程集成方法和基础调用示例，请使用以下例程仓库：
 
 - [esp32_lora_samples](https://github.com/lierda-iot/esp32_lora_samples.git)
+
+应用示例：
+
+- [DoorCam-LR](https://github.com/lierda-iot/DoorCam-LR)：可视门铃，通过 FLRC 突发传输实时视频和双向语音，基于本组件的 `RAL` 接口开发。它的接收方式见"使用注意事项"中的"接收状态标志"一节。
 
 ## 文档链接
 
@@ -439,6 +445,98 @@ idf.py build
 ```
 
 如果当前目标是 `LR20XX / LR2021` 路径，组件已经完成过最小工程构建验证，可作为当前主要集成路径使用。
+
+## 使用注意事项
+
+### OOK 调制（LR20xx）
+
+LR20xx 可以通过 `RALF` 和 `RAL` 使用 OOK；其他芯片调用这些接口会返回 `RAL_STATUS_UNSUPPORTED_FEATURE`。
+
+- `ralf_setup_ook()` 配合 `ralf_params_ook_t`，一次完成包类型、频率、发射功率、包参数、调制参数、接收检测器、同步字、CRC、地址和白化的配置
+- `ral_set_ook_*()`、`ral_get_ook_rx_pkt_status()`、`ral_get_ook_time_on_air_in_ms()` 可以单独调用每一步
+- 收发与其他调制方式一样，使用 `ral_set_tx()` / `ral_set_rx()` 和中断相关接口
+
+示例：
+
+```c
+static const uint8_t ook_sync_word[4] = { 0x7F, 0x53, 0x65, 0x64 };
+
+const ralf_params_ook_t ook_params = {
+    .rf_freq_in_hz     = 868100000,
+    .output_pwr_in_dbm = 14,
+    .mod_params = {
+        .br_in_bps    = 32000,
+        .bw_dsb_in_hz = 153000,
+        .pulse_shape  = RAL_OOK_PULSE_SHAPE_OFF,
+        .mag_depth    = RAL_OOK_MAG_DEPTH_FULL,
+    },
+    .pkt_params = {
+        .preamble_len_in_bits  = 32,
+        .sync_word_len_in_bits = 32,
+        .address_filtering     = RAL_OOK_ADDRESS_FILTERING_DISABLE,
+        .header_type           = RAL_OOK_PKT_VAR_LEN,
+        .pld_len_in_bytes      = 255,
+        .crc_type              = RAL_OOK_CRC_2_BYTES,
+        .encoding              = RAL_OOK_ENCODING_OFF,
+    },
+    .rx_detector = {
+        .pattern              = 0x5,
+        .pattern_len_in_bits  = 4,
+        .pattern_repeat_nb    = 8,
+        .sfd_type             = RAL_OOK_SFD_FALLING_EDGE,
+        .sfd_len_in_bits      = 0,
+        .is_sync_word_encoded = false,
+    },
+    .sync_word            = ook_sync_word,
+    .sync_word_bit_order  = RAL_OOK_SYNC_WORD_MSB_FIRST,
+    .crc_seed             = 0x1D0F,
+    .crc_polynomial       = 0x1021,
+    .whitening_polynomial = 0,  // 不使用白化
+};
+
+ralf_setup_ook( &radio, &ook_params );
+```
+
+说明：
+
+- `pattern_len_in_bits` 填图样的实际位数，驱动写入芯片时会自动减 1
+- `whitening_polynomial` 不为 0 时才开启白化；`whitening_polynomial` 和 `whitening_seed` 是 12 位数值，`whitening_bit_index` 取值 0～15（LR20xx 参考例程用的是 1）
+- LR20xx 驱动文档指出，OOK 使用显式包头但不开 CRC 时接收可能出错，所以带长度包头时请开启 CRC
+- 芯片自动计算的 OOK 检测门限偏保守；如果误包率偏高，可以调用 `lr20xx_workarounds_ook_set_detection_threshold_level()` 调整，详见 [radio_drivers/lr20xx_driver/README.md](radio_drivers/lr20xx_driver/README.md)
+- `ral_get_ook_time_on_air_in_ms()` 在比特率为 0 时返回 0；LR20xx 驱动算不了的配置也返回 0：16 位长度包头（`RAL_OOK_PKT_VAR_LEN_16_BITS`）和 Biphase Mark 编码
+
+### 接收状态标志（LR20xx）
+
+LR20xx 的所有中断都可以通过 `RAL` 使用（`ral_set_dio_irq_params()`、`ral_get_irq_status()`、`ral_get_and_clear_irq_status()`、`ral_clear_irq_status()`）。除了常用标志，还包括：
+
+- `RAL_IRQ_RX_LEN_ERROR`：收到的包比配置的载荷长度长，与 `RAL_IRQ_RX_DONE` 一起上报
+- `RAL_IRQ_RX_ADDR_ERROR`：地址不匹配，包被丢弃
+- `RAL_IRQ_RTTOF_REQ_VALID`、`RAL_IRQ_RX_HDR_TIMESTAMP`、`RAL_IRQ_LOW_BATTERY`、`RAL_IRQ_PA_OVP_OCP`、`RAL_IRQ_LR_FHSS_NEW_TABLE`、`RAL_IRQ_LR_FHSS_NEW_PAYLOAD`
+
+`RAL_IRQ_ALL` 会清除 LR20xx 的全部中断，包括厂商掩码 `LR20XX_SYSTEM_IRQ_ALL_MASK` 漏掉的 `PA_OVP_OCP`。
+
+驱动负责上报这些标志；要不要用硬件 CRC、每个标志怎么处理，由应用决定。`RAC`（radio planner）只根据 `RX_DONE`、包头错误和 CRC 错误判断接收结果，读完就清除中断，所以需要其他标志的应用请直接使用 `RAL`。
+
+建议：
+
+- **每次 `RX_DONE` 对应一个包**（单包收发的 LoRa、GFSK、FLRC、OOK）：开启硬件 CRC，`RX_DONE` 同时带有 `RAL_IRQ_RX_CRC_ERROR` 或 `RAL_IRQ_RX_LEN_ERROR` 时按坏包处理，与 LR20xx 参考例程一致。
+- **FLRC 连续突发接收**，应用醒来时 RX FIFO 里可能已有多个包：这些包的中断标志会叠加在一起，分不出是哪个包出错。建议按 FIFO 水位读取，在软件里恢复包边界，并用应用层 CRC 逐包校验，这时可以关闭硬件 CRC。[DoorCam-LR](https://github.com/lierda-iot/DoorCam-LR) 就是这样做的，见 `main/radio_ping.cpp` 中的 `flrc_packet_params()` 和 `handle_rx_packet()`。
+
+### 不保留 RAM 的睡眠
+
+组件自身只使用 `ral_set_sleep( radio, true )`，睡眠期间保留芯片配置和 PRAM。
+
+调用 `ral_set_sleep( radio, false )` 后，芯片的配置和 PRAM 都会丢失。唤醒后需要重新调用 `ral_init()`：它会加载并校验 PRAM，恢复时钟、DIO、校准和 FIFO 配置。之后再按上电后的流程重新配置射频参数，例如 `ralf_setup_lora()`、`ral_set_dio_irq_params()`。不需要单独复位，HAL 在发送第一条命令时会自动唤醒芯片。
+
+### 以源码形式作为本地组件使用
+
+通过 `idf_component.yml` 的 `override_path` 或 `path` 引用本仓库，或把它放进工程的 `components/` 目录时，ESP-IDF 以目录名作为组件名。应用代码引用的组件名是 `esp_lora_driver`，所以目录必须命名为 `esp_lora_driver`，例如：
+
+```bash
+git clone https://github.com/lierda-iot/esp32_lora_driver.git esp_lora_driver
+```
+
+另外，`override_path` 以相对路径保存，在 Windows 上工程和组件需要放在同一个盘符下。
 
 ## 推荐使用方式
 

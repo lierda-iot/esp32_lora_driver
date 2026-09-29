@@ -95,6 +95,31 @@ typedef struct ralf_params_flrc_s
     bool                  is_tx;
 } ralf_params_flrc_t;
 
+/**
+ * @brief OOK setup parameters (LR20xx only)
+ *
+ * The sync word is configured when pkt_params.sync_word_len_in_bits is not 0, the CRC seed and polynomial when
+ * pkt_params.crc_type is not RAL_OOK_CRC_OFF, and the addresses when address filtering is enabled. A whitening
+ * polynomial equal to 0 disables the whitening.
+ */
+typedef struct ralf_params_ook_s
+{
+    ral_ook_mod_params_t          mod_params;
+    ral_ook_pkt_params_t          pkt_params;
+    ral_ook_rx_detector_t         rx_detector;
+    const uint8_t*                sync_word;  //!< 4-byte buffer, see ral_set_ook_sync_word
+    ral_ook_sync_word_bit_order_t sync_word_bit_order;
+    uint32_t                      rf_freq_in_hz;
+    uint32_t                      crc_seed;
+    uint32_t                      crc_polynomial;
+    uint8_t                       node_address;
+    uint8_t                       broadcast_address;
+    uint8_t                       whitening_bit_index;
+    uint16_t                      whitening_polynomial;
+    uint16_t                      whitening_seed;
+    int8_t                        output_pwr_in_dbm;
+} ralf_params_ook_t;
+
 typedef struct ralf_params_lr_fhss_s
 {
     ral_lr_fhss_params_t ral_lr_fhss_params;

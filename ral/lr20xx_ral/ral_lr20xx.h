@@ -107,6 +107,15 @@ extern "C" {
         .rttof_set_request_address       = ral_lr20xx_rttof_set_request_address,                                      \
         .rttof_set_rx_tx_delay_indicator = ral_lr20xx_rttof_set_rx_tx_delay_indicator,                                \
         .rttof_get_raw_result            = ral_lr20xx_rttof_get_raw_result,                                           \
+        .set_ook_mod_params = ral_lr20xx_set_ook_mod_params,                                                          \
+        .set_ook_pkt_params = ral_lr20xx_set_ook_pkt_params,                                                          \
+        .set_ook_rx_detector = ral_lr20xx_set_ook_rx_detector,                                                        \
+        .set_ook_sync_word = ral_lr20xx_set_ook_sync_word,                                                            \
+        .set_ook_crc_params = ral_lr20xx_set_ook_crc_params,                                                          \
+        .set_ook_pkt_address = ral_lr20xx_set_ook_pkt_address,                                                        \
+        .set_ook_whitening_params = ral_lr20xx_set_ook_whitening_params,                                              \
+        .get_ook_rx_pkt_status = ral_lr20xx_get_ook_rx_pkt_status,                                                    \
+        .get_ook_time_on_air_in_ms = ral_lr20xx_get_ook_time_on_air_in_ms,                                            \
     }
 
 #define RAL_LR20XX_INSTANTIATE( ctx )                         \
@@ -224,6 +233,11 @@ ral_status_t ral_lr20xx_set_tx_infinite_preamble( const void* context );
 
 /**
  * @see ral_cal_img
+ *
+ * @remark On LR20xx this runs a front-end calibration at freq1_in_mhz and at freq2_in_mhz, each on the RX path that
+ * @ref ral_lr20xx_bsp_get_rx_cfg selects for that frequency. It does not change the RF frequency.
+ * @remark The initialisation and @ref ral_lr20xx_set_rf_freq already calibrate the front end, so applications only
+ * need this function to force a calibration.
  */
 ral_status_t ral_lr20xx_cal_img( const void* context, const uint16_t freq1_in_mhz, const uint16_t freq2_in_mhz );
 
@@ -306,6 +320,9 @@ ral_status_t ral_lr20xx_get_irq_status( const void* context, ral_irq_t* irq );
 
 /**
  * @see ral_clear_irq_status
+ *
+ * @remark Every LR20xx IRQ has a RAL flag, so @ref RAL_IRQ_ALL clears all of them. This includes
+ * LR20XX_SYSTEM_IRQ_PA_OVP_OCP, which LR20XX_SYSTEM_IRQ_ALL_MASK leaves out.
  */
 ral_status_t ral_lr20xx_clear_irq_status( const void* context, const ral_irq_t irq );
 
@@ -321,6 +338,10 @@ ral_status_t ral_lr20xx_set_dio_irq_params( const void* context, const ral_irq_t
 
 /**
  * @see ral_set_rf_freq
+ *
+ * @remark The radio is left in standby XOSC. The PLL and AAF are calibrated again when the frequency moved by more than
+ * 50 MHz since their last calibration, and the front end when it moved by more than 10 MHz. A reset or
+ * @ref ral_lr20xx_init makes the next call run both calibrations.
  */
 ral_status_t ral_lr20xx_set_rf_freq( const void* context, const uint32_t freq_in_hz );
 
@@ -447,6 +468,59 @@ ral_status_t ral_lr20xx_set_gfsk_crc_params( const void* context, const uint32_t
  * @see ral_set_flrc_crc_params
  */
 ral_status_t ral_lr20xx_set_flrc_crc_params( const void* context, const uint32_t seed, const uint32_t polynomial );
+
+/**
+ * @see ral_set_ook_mod_params
+ */
+ral_status_t ral_lr20xx_set_ook_mod_params( const void* context, const ral_ook_mod_params_t* params );
+
+/**
+ * @see ral_set_ook_pkt_params
+ */
+ral_status_t ral_lr20xx_set_ook_pkt_params( const void* context, const ral_ook_pkt_params_t* params );
+
+/**
+ * @see ral_set_ook_rx_detector
+ */
+ral_status_t ral_lr20xx_set_ook_rx_detector( const void* context, const ral_ook_rx_detector_t* params );
+
+/**
+ * @see ral_set_ook_sync_word
+ */
+ral_status_t ral_lr20xx_set_ook_sync_word( const void* context, const uint8_t* sync_word,
+                                           const uint8_t                       sync_word_len_in_bits,
+                                           const ral_ook_sync_word_bit_order_t bit_order );
+
+/**
+ * @see ral_set_ook_crc_params
+ */
+ral_status_t ral_lr20xx_set_ook_crc_params( const void* context, const uint32_t seed, const uint32_t polynomial );
+
+/**
+ * @see ral_set_ook_pkt_address
+ */
+ral_status_t ral_lr20xx_set_ook_pkt_address( const void* context, const uint8_t node_address,
+                                             const uint8_t broadcast_address );
+
+/**
+ * @see ral_set_ook_whitening_params
+ */
+ral_status_t ral_lr20xx_set_ook_whitening_params( const void* context, const uint8_t bit_index,
+                                                  const uint16_t polynomial, const uint16_t seed );
+
+/**
+ * @see ral_get_ook_rx_pkt_status
+ */
+ral_status_t ral_lr20xx_get_ook_rx_pkt_status( const void* context, ral_ook_rx_pkt_status_t* rx_pkt_status );
+
+/**
+ * @see ral_get_ook_time_on_air_in_ms
+ *
+ * @remark Returns 0 when the bit rate is 0, and for the configurations the LR20xx driver cannot compute:
+ * 16-bit length header (@ref RAL_OOK_PKT_VAR_LEN_16_BITS) and bi-phase mark encoding.
+ */
+uint32_t ral_lr20xx_get_ook_time_on_air_in_ms( const ral_ook_pkt_params_t* pkt_p,
+                                              const ral_ook_mod_params_t* mod_p );
 
 /**
  * @see ral_set_gfsk_whitening_seed

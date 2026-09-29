@@ -582,11 +582,12 @@ static inline const char* ral_lora_pkt_len_modes_to_str( const ral_lora_pkt_len_
     return "UNKNOWN_RAL_LORA_PKT_LEN_MODE";
 }
 
-#define RAL_PKT_TYPE( X )     \
-    X( RAL_PKT_TYPE_GFSK, 0 ) \
-    X( RAL_PKT_TYPE_LORA, 1 ) \
-    X( RAL_PKT_TYPE_FLRC, 2 ) \
-    X( RAL_PKT_TYPE_RTTOF, 3 )
+#define RAL_PKT_TYPE( X )      \
+    X( RAL_PKT_TYPE_GFSK, 0 )  \
+    X( RAL_PKT_TYPE_LORA, 1 )  \
+    X( RAL_PKT_TYPE_FLRC, 2 )  \
+    X( RAL_PKT_TYPE_RTTOF, 3 ) \
+    X( RAL_PKT_TYPE_OOK, 4 )
 
 typedef enum ral_pkt_types_e
 {
@@ -893,6 +894,293 @@ typedef struct ral_flrc_pkt_params_s
     ral_flrc_crc_type_t           crc_type;
 } ral_flrc_pkt_params_t;
 
+/**
+ * @brief OOK pulse shaping
+ */
+#define RAL_OOK_PULSE_SHAPE( X )      \
+    X( RAL_OOK_PULSE_SHAPE_OFF, 0 )   \
+    X( RAL_OOK_PULSE_SHAPE_BT_05, 1 ) \
+    X( RAL_OOK_PULSE_SHAPE_BT_1, 2 )
+
+typedef enum ral_ook_pulse_shape_e
+{
+#define X( identifier, value ) identifier = value,
+    RAL_OOK_PULSE_SHAPE( X )
+#undef X
+} ral_ook_pulse_shape_t;
+
+static inline const char* ral_ook_pulse_shape_to_str( const ral_ook_pulse_shape_t value )
+{
+    switch( value )
+    {
+#define X( identifier, _ ) \
+    case identifier:       \
+        return #identifier;
+        RAL_OOK_PULSE_SHAPE( X )
+#undef X
+    }
+    return "UNKNOWN_RAL_OOK_PULSE_SHAPE";
+}
+
+/**
+ * @brief OOK magnitude depth: limited by the power amplifier (FULL) or up to 20 dB
+ */
+#define RAL_OOK_MAG_DEPTH( X )     \
+    X( RAL_OOK_MAG_DEPTH_FULL, 0 ) \
+    X( RAL_OOK_MAG_DEPTH_UP_TO_20DB, 1 )
+
+typedef enum ral_ook_mag_depth_e
+{
+#define X( identifier, value ) identifier = value,
+    RAL_OOK_MAG_DEPTH( X )
+#undef X
+} ral_ook_mag_depth_t;
+
+static inline const char* ral_ook_mag_depth_to_str( const ral_ook_mag_depth_t value )
+{
+    switch( value )
+    {
+#define X( identifier, _ ) \
+    case identifier:       \
+        return #identifier;
+        RAL_OOK_MAG_DEPTH( X )
+#undef X
+    }
+    return "UNKNOWN_RAL_OOK_MAG_DEPTH";
+}
+
+/**
+ * @brief OOK address filtering configuration
+ */
+#define RAL_OOK_ADDRESS_FILTERING( X )             \
+    X( RAL_OOK_ADDRESS_FILTERING_DISABLE, 0 )      \
+    X( RAL_OOK_ADDRESS_FILTERING_NODE_ADDRESS, 1 ) \
+    X( RAL_OOK_ADDRESS_FILTERING_NODE_AND_BROADCAST_ADDRESSES, 2 )
+
+typedef enum ral_ook_address_filtering_e
+{
+#define X( identifier, value ) identifier = value,
+    RAL_OOK_ADDRESS_FILTERING( X )
+#undef X
+} ral_ook_address_filtering_t;
+
+static inline const char* ral_ook_address_filtering_to_str( const ral_ook_address_filtering_t value )
+{
+    switch( value )
+    {
+#define X( identifier, _ ) \
+    case identifier:       \
+        return #identifier;
+        RAL_OOK_ADDRESS_FILTERING( X )
+#undef X
+    }
+    return "UNKNOWN_RAL_OOK_ADDRESS_FILTERING";
+}
+
+/**
+ * @brief OOK header type: fixed length (no header), 8-bit length header or 16-bit length header
+ */
+#define RAL_OOK_PKT_LEN_MODES( X ) \
+    X( RAL_OOK_PKT_FIX_LEN, 0 )    \
+    X( RAL_OOK_PKT_VAR_LEN, 1 )    \
+    X( RAL_OOK_PKT_VAR_LEN_16_BITS, 2 )
+
+typedef enum ral_ook_pkt_len_modes_e
+{
+#define X( identifier, value ) identifier = value,
+    RAL_OOK_PKT_LEN_MODES( X )
+#undef X
+} ral_ook_pkt_len_modes_t;
+
+static inline const char* ral_ook_pkt_len_modes_to_str( const ral_ook_pkt_len_modes_t value )
+{
+    switch( value )
+    {
+#define X( identifier, _ ) \
+    case identifier:       \
+        return #identifier;
+        RAL_OOK_PKT_LEN_MODES( X )
+#undef X
+    }
+    return "UNKNOWN_RAL_OOK_PKT_LEN_MODES";
+}
+
+/**
+ * @brief OOK CRC configuration
+ */
+#define RAL_OOK_CRC_TYPE( X )       \
+    X( RAL_OOK_CRC_OFF, 0 )         \
+    X( RAL_OOK_CRC_1_BYTE, 1 )      \
+    X( RAL_OOK_CRC_2_BYTES, 2 )     \
+    X( RAL_OOK_CRC_3_BYTES, 3 )     \
+    X( RAL_OOK_CRC_4_BYTES, 4 )     \
+    X( RAL_OOK_CRC_1_BYTE_INV, 5 )  \
+    X( RAL_OOK_CRC_2_BYTES_INV, 6 ) \
+    X( RAL_OOK_CRC_3_BYTES_INV, 7 ) \
+    X( RAL_OOK_CRC_4_BYTES_INV, 8 )
+
+typedef enum ral_ook_crc_type_e
+{
+#define X( identifier, value ) identifier = value,
+    RAL_OOK_CRC_TYPE( X )
+#undef X
+} ral_ook_crc_type_t;
+
+static inline const char* ral_ook_crc_type_to_str( const ral_ook_crc_type_t value )
+{
+    switch( value )
+    {
+#define X( identifier, _ ) \
+    case identifier:       \
+        return #identifier;
+        RAL_OOK_CRC_TYPE( X )
+#undef X
+    }
+    return "UNKNOWN_RAL_OOK_CRC_TYPE";
+}
+
+/**
+ * @brief OOK payload encoding
+ */
+#define RAL_OOK_ENCODING( X )               \
+    X( RAL_OOK_ENCODING_OFF, 0 )            \
+    X( RAL_OOK_ENCODING_MANCHESTER, 1 )     \
+    X( RAL_OOK_ENCODING_MANCHESTER_INV, 2 ) \
+    X( RAL_OOK_ENCODING_BIPHASE_MARK, 3 )   \
+    X( RAL_OOK_ENCODING_BIPHASE_MARK_INV, 4 )
+
+typedef enum ral_ook_encoding_e
+{
+#define X( identifier, value ) identifier = value,
+    RAL_OOK_ENCODING( X )
+#undef X
+} ral_ook_encoding_t;
+
+static inline const char* ral_ook_encoding_to_str( const ral_ook_encoding_t value )
+{
+    switch( value )
+    {
+#define X( identifier, _ ) \
+    case identifier:       \
+        return #identifier;
+        RAL_OOK_ENCODING( X )
+#undef X
+    }
+    return "UNKNOWN_RAL_OOK_ENCODING";
+}
+
+/**
+ * @brief Order in which the OOK sync word bits are sent over the air
+ */
+#define RAL_OOK_SYNC_WORD_BIT_ORDER( X ) \
+    X( RAL_OOK_SYNC_WORD_LSB_FIRST, 0 )  \
+    X( RAL_OOK_SYNC_WORD_MSB_FIRST, 1 )
+
+typedef enum ral_ook_sync_word_bit_order_e
+{
+#define X( identifier, value ) identifier = value,
+    RAL_OOK_SYNC_WORD_BIT_ORDER( X )
+#undef X
+} ral_ook_sync_word_bit_order_t;
+
+static inline const char* ral_ook_sync_word_bit_order_to_str( const ral_ook_sync_word_bit_order_t value )
+{
+    switch( value )
+    {
+#define X( identifier, _ ) \
+    case identifier:       \
+        return #identifier;
+        RAL_OOK_SYNC_WORD_BIT_ORDER( X )
+#undef X
+    }
+    return "UNKNOWN_RAL_OOK_SYNC_WORD_BIT_ORDER";
+}
+
+/**
+ * @brief OOK start-of-frame delimiter type
+ */
+#define RAL_OOK_SFD_TYPE( X )        \
+    X( RAL_OOK_SFD_FALLING_EDGE, 0 ) \
+    X( RAL_OOK_SFD_RISING_EDGE, 1 )
+
+typedef enum ral_ook_sfd_type_e
+{
+#define X( identifier, value ) identifier = value,
+    RAL_OOK_SFD_TYPE( X )
+#undef X
+} ral_ook_sfd_type_t;
+
+static inline const char* ral_ook_sfd_type_to_str( const ral_ook_sfd_type_t value )
+{
+    switch( value )
+    {
+#define X( identifier, _ ) \
+    case identifier:       \
+        return #identifier;
+        RAL_OOK_SFD_TYPE( X )
+#undef X
+    }
+    return "UNKNOWN_RAL_OOK_SFD_TYPE";
+}
+
+/**
+ * @brief OOK modulation parameters structure definition
+ */
+typedef struct ral_ook_mod_params_s
+{
+    uint32_t              br_in_bps;     //!< Bitrate in bit/s
+    uint32_t              bw_dsb_in_hz;  //!< Receiver double-sideband bandwidth in Hz
+    ral_ook_pulse_shape_t pulse_shape;   //!< Pulse shaping
+    ral_ook_mag_depth_t   mag_depth;     //!< Magnitude depth
+} ral_ook_mod_params_t;
+
+/**
+ * @brief OOK packet parameters structure definition
+ *
+ * With a length header, pld_len_in_bytes is the longest payload accepted: a longer packet raises
+ * @ref RAL_IRQ_RX_LEN_ERROR.
+ */
+typedef struct ral_ook_pkt_params_s
+{
+    uint16_t                    preamble_len_in_bits;   //!< Preamble length in bits
+    uint8_t                     sync_word_len_in_bits;  //!< Sync word length in bits, used for the time on air
+    ral_ook_address_filtering_t address_filtering;      //!< Address filtering configuration
+    ral_ook_pkt_len_modes_t     header_type;            //!< Header type
+    uint16_t                    pld_len_in_bytes;       //!< Payload length in bytes
+    ral_ook_crc_type_t          crc_type;               //!< CRC configuration
+    ral_ook_encoding_t          encoding;               //!< Payload encoding
+} ral_ook_pkt_params_t;
+
+/**
+ * @brief OOK receiver detector configuration
+ *
+ * The receiver looks for pattern_repeat_nb repetitions of the pattern_len_in_bits least significant bits of pattern.
+ */
+typedef struct ral_ook_rx_detector_s
+{
+    uint16_t           pattern;               //!< Detection pattern
+    uint8_t            pattern_len_in_bits;   //!< Pattern length in bits - in [1:16]
+    uint8_t            pattern_repeat_nb;     //!< Number of pattern repetitions - in [0:31]
+    ral_ook_sfd_type_t sfd_type;              //!< Start-of-frame delimiter type
+    uint8_t            sfd_len_in_bits;       //!< Start-of-frame delimiter length in bits - in [0:15]
+    bool               is_sync_word_encoded;  //!< True when the sync word is encoded like the payload
+} ral_ook_rx_detector_t;
+
+/**
+ * @brief Status of the last OOK packet received
+ */
+typedef struct ral_ook_rx_pkt_status_s
+{
+    uint16_t packet_length_bytes;      //!< Length of the last received packet in bytes
+    int16_t  rssi_avg_in_dbm;          //!< RSSI in dBm - averaged over the last received packet
+    uint8_t  rssi_avg_half_dbm_count;  //!< Count of 0.5 dBm to subtract to rssi_avg_in_dbm value in dBm
+    int16_t  rssi_on_in_dbm;           //!< RSSI in dBm - estimated during the "on" symbols
+    uint8_t  rssi_on_half_dbm_count;   //!< Count of 0.5 dBm to subtract to rssi_on_in_dbm value in dBm
+    bool     is_addr_match_broadcast;  //!< True when address filtering is enabled and matched the broadcast address
+    bool     is_addr_match_node;       //!< True when address filtering is enabled and matched the node address
+    uint8_t  link_quality_indicator;   //!< Average difference between "0" and "1" symbols in dB
+} ral_ook_rx_pkt_status_t;
+
 /*!
  * @brief LR FHSS parameters
  */
@@ -916,8 +1204,9 @@ typedef void* ral_lr_fhss_memory_state_t;
 /**
  * @brief IRQ definitions
  *
- * @remark This enumeration cannot accept more than 16 entries in addition to @ref RAL_IRQ_NONE and @ref RAL_IRQ_ALL -
- * this is related to the fact that @ref ral_irq_t is 16-bit long
+ * @remark @ref ral_irq_t is 32-bit long: bits 1 to 30 hold the IRQ flags. Bit 31 is not used because the
+ * enumeration values are signed integers.
+ * @remark Only LR20xx radios report @ref RAL_IRQ_RX_LEN_ERROR and the flags that follow it.
  */
 enum ral_irq_e
 {
@@ -944,12 +1233,22 @@ enum ral_irq_e
     RAL_IRQ_RTTOF_TIMEOUT        = ( 1 << 20 ),
     RAL_IRQ_CMD_ERROR            = ( 1 << 21 ),
     RAL_IRQ_ERROR                = ( 1 << 22 ),
+    RAL_IRQ_RX_LEN_ERROR         = ( 1 << 23 ),  //!< Received packet longer than expected (set with RX done)
+    RAL_IRQ_RTTOF_REQ_VALID      = ( 1 << 24 ),  //!< RTToF responder received a valid request
+    RAL_IRQ_RX_ADDR_ERROR        = ( 1 << 25 ),  //!< Received packet discarded: no address match
+    RAL_IRQ_RX_HDR_TIMESTAMP     = ( 1 << 26 ),  //!< End of the LoRa header, or 8 payload symbols in implicit mode
+    RAL_IRQ_LOW_BATTERY          = ( 1 << 27 ),  //!< Supply voltage dropped below the threshold
+    RAL_IRQ_PA_OVP_OCP           = ( 1 << 28 ),  //!< Power amplifier over-current protection triggered
+    RAL_IRQ_LR_FHSS_NEW_TABLE    = ( 1 << 29 ),  //!< A new LR-FHSS frequency table can be loaded
+    RAL_IRQ_LR_FHSS_NEW_PAYLOAD  = ( 1 << 30 ),  //!< A new LR-FHSS payload can be loaded
     RAL_IRQ_ALL = RAL_IRQ_TX_DONE | RAL_IRQ_RX_DONE | RAL_IRQ_RX_TIMEOUT | RAL_IRQ_RX_PREAMBLE_DETECTED |
                   RAL_IRQ_RX_HDR_OK | RAL_IRQ_RX_HDR_ERROR | RAL_IRQ_RX_CRC_ERROR | RAL_IRQ_CAD_DONE | RAL_IRQ_CAD_OK |
                   RAL_IRQ_LR_FHSS_HOP | RAL_IRQ_WIFI_SCAN_DONE | RAL_IRQ_GNSS_SCAN_DONE | RAL_IRQ_RX_FIFO_LEVEL |
                   RAL_IRQ_TX_FIFO_LEVEL | RAL_IRQ_RX_TIMESTAMP | RAL_IRQ_TX_TIMESTAMP | RAL_IRQ_RTTOF_REQ_DISCARDED |
                   RAL_IRQ_RTTOF_RESP_DONE | RAL_IRQ_RTTOF_EXCH_VALID | RAL_IRQ_RTTOF_TIMEOUT | RAL_IRQ_CMD_ERROR |
-                  RAL_IRQ_ERROR,
+                  RAL_IRQ_ERROR | RAL_IRQ_RX_LEN_ERROR | RAL_IRQ_RTTOF_REQ_VALID | RAL_IRQ_RX_ADDR_ERROR |
+                  RAL_IRQ_RX_HDR_TIMESTAMP | RAL_IRQ_LOW_BATTERY | RAL_IRQ_PA_OVP_OCP | RAL_IRQ_LR_FHSS_NEW_TABLE |
+                  RAL_IRQ_LR_FHSS_NEW_PAYLOAD,
 };
 
 typedef uint32_t ral_irq_t;

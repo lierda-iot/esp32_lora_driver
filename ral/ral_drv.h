@@ -142,6 +142,21 @@ typedef ral_status_t ( *ral_set_gfsk_crc_params_f )( const void* context, const 
                                                      const uint32_t polynomial );
 typedef ral_status_t ( *ral_set_flrc_crc_params_f )( const void* context, const uint32_t seed,
                                                      const uint32_t polynomial );
+typedef ral_status_t ( *ral_set_ook_mod_params_f )( const void* context, const ral_ook_mod_params_t* params );
+typedef ral_status_t ( *ral_set_ook_pkt_params_f )( const void* context, const ral_ook_pkt_params_t* params );
+typedef ral_status_t ( *ral_set_ook_rx_detector_f )( const void* context, const ral_ook_rx_detector_t* params );
+typedef ral_status_t ( *ral_set_ook_sync_word_f )( const void* context, const uint8_t* sync_word,
+                                                   const uint8_t                       sync_word_len_in_bits,
+                                                   const ral_ook_sync_word_bit_order_t bit_order );
+typedef ral_status_t ( *ral_set_ook_crc_params_f )( const void* context, const uint32_t seed,
+                                                    const uint32_t polynomial );
+typedef ral_status_t ( *ral_set_ook_pkt_address_f )( const void* context, const uint8_t node_address,
+                                                     const uint8_t broadcast_address );
+typedef ral_status_t ( *ral_set_ook_whitening_params_f )( const void* context, const uint8_t bit_index,
+                                                          const uint16_t polynomial, const uint16_t seed );
+typedef ral_status_t ( *ral_get_ook_rx_pkt_status_f )( const void* context, ral_ook_rx_pkt_status_t* rx_pkt_status );
+typedef uint32_t ( *ral_get_ook_time_on_air_in_ms_f )( const ral_ook_pkt_params_t* pkt_p,
+                                                       const ral_ook_mod_params_t* mod_p );
 typedef ral_status_t ( *ral_set_gfsk_whitening_seed_f )( const void* context, const uint16_t seed );
 typedef ral_status_t ( *ral_set_gfsk_whitening_seed_comp_f )( const void* context, const ral_gfsk_dc_free_t dc_free,
                                                               const uint16_t seed );
@@ -268,6 +283,16 @@ typedef struct ral_drv_s
     ral_rttof_set_request_address_f       rttof_set_request_address;
     ral_rttof_set_rx_tx_delay_indicator_f rttof_set_rx_tx_delay_indicator;
     ral_rttof_get_raw_result_f            rttof_get_raw_result;
+    // OOK: only LR20xx radios provide these functions, the other radios leave them NULL
+    ral_set_ook_mod_params_f              set_ook_mod_params;
+    ral_set_ook_pkt_params_f              set_ook_pkt_params;
+    ral_set_ook_rx_detector_f             set_ook_rx_detector;
+    ral_set_ook_sync_word_f               set_ook_sync_word;
+    ral_set_ook_crc_params_f              set_ook_crc_params;
+    ral_set_ook_pkt_address_f             set_ook_pkt_address;
+    ral_set_ook_whitening_params_f        set_ook_whitening_params;
+    ral_get_ook_rx_pkt_status_f           get_ook_rx_pkt_status;
+    ral_get_ook_time_on_air_in_ms_f       get_ook_time_on_air_in_ms;
 } ral_drv_t;
 
 /*

@@ -359,6 +359,8 @@ For `L-LRMWP35-FANN4` and custom `ESP-IDF + LR2021 SPI` hardware, you typically 
 
 These options are defined in [Kconfig](Kconfig).
 
+`LR2021_NRST_GPIO` can be set to `-1` when NRST is not connected. `ral_reset()` then cannot reset the radio: it only makes sure the radio is woken up before the next command. Connecting NRST is recommended, because without it the radio keeps its state, including the loaded PRAM, when only the ESP32 restarts.
+
 If your hardware is not wired like the default `L-LRMAM36-FANN4`, these parameters should be treated as mandatory checks, not optional tuning.
 
 ## ESP-IDF Integration
@@ -381,6 +383,10 @@ After integrating it into a project, users usually only need to:
 For integration examples and basic usage references, use:
 
 - [esp32_lora_samples](https://github.com/lierda-iot/esp32_lora_samples.git)
+
+Application example:
+
+- [DoorCam-LR](https://github.com/lierda-iot/DoorCam-LR): video doorbell with live video and two-way voice over FLRC bursts, built on this component through `RAL`. Its receive path is described in [Receive Status Flags](#receive-status-flags-lr20xx).
 
 ## Documentation Links
 
@@ -434,6 +440,98 @@ idf.py build
 ```
 
 For the current `LR20XX / LR2021` path, the component has already passed a minimal build validation and is the main integration path at this stage.
+
+## Usage Notes
+
+### OOK Modulation (LR20xx)
+
+OOK is available through `RALF` and `RAL` on LR20xx radios (other radios return `RAL_STATUS_UNSUPPORTED_FEATURE`):
+
+- `ralf_setup_ook()` with `ralf_params_ook_t` configures the packet type, frequency, TX power, packet and modulation parameters, receiver detector, sync word, CRC, addresses and whitening in one call
+- `ral_set_ook_*()`, `ral_get_ook_rx_pkt_status()` and `ral_get_ook_time_on_air_in_ms()` give access to each step
+- transmission and reception use the usual `ral_set_tx()` / `ral_set_rx()` and IRQ functions
+
+Example:
+
+```c
+static const uint8_t ook_sync_word[4] = { 0x7F, 0x53, 0x65, 0x64 };
+
+const ralf_params_ook_t ook_params = {
+    .rf_freq_in_hz     = 868100000,
+    .output_pwr_in_dbm = 14,
+    .mod_params = {
+        .br_in_bps    = 32000,
+        .bw_dsb_in_hz = 153000,
+        .pulse_shape  = RAL_OOK_PULSE_SHAPE_OFF,
+        .mag_depth    = RAL_OOK_MAG_DEPTH_FULL,
+    },
+    .pkt_params = {
+        .preamble_len_in_bits  = 32,
+        .sync_word_len_in_bits = 32,
+        .address_filtering     = RAL_OOK_ADDRESS_FILTERING_DISABLE,
+        .header_type           = RAL_OOK_PKT_VAR_LEN,
+        .pld_len_in_bytes      = 255,
+        .crc_type              = RAL_OOK_CRC_2_BYTES,
+        .encoding              = RAL_OOK_ENCODING_OFF,
+    },
+    .rx_detector = {
+        .pattern              = 0x5,
+        .pattern_len_in_bits  = 4,
+        .pattern_repeat_nb    = 8,
+        .sfd_type             = RAL_OOK_SFD_FALLING_EDGE,
+        .sfd_len_in_bits      = 0,
+        .is_sync_word_encoded = false,
+    },
+    .sync_word            = ook_sync_word,
+    .sync_word_bit_order  = RAL_OOK_SYNC_WORD_MSB_FIRST,
+    .crc_seed             = 0x1D0F,
+    .crc_polynomial       = 0x1021,
+    .whitening_polynomial = 0,  // whitening disabled
+};
+
+ralf_setup_ook( &radio, &ook_params );
+```
+
+Notes:
+
+- `pattern_len_in_bits` is the real pattern length; the driver writes the length minus one to the radio
+- whitening is enabled by a non-zero `whitening_polynomial`; `whitening_polynomial` and `whitening_seed` are 12-bit values and `whitening_bit_index` is in [0:15] (the LR20xx reference examples use bit index 1)
+- the LR20xx driver documents that an explicit header without CRC is known to cause incorrect OOK reception, so keep the CRC enabled with a length header
+- the radio computes a conservative OOK detection threshold; if the packet error rate is too high, the threshold can be changed with `lr20xx_workarounds_ook_set_detection_threshold_level()` (see [radio_drivers/lr20xx_driver/README.md](radio_drivers/lr20xx_driver/README.md))
+- `ral_get_ook_time_on_air_in_ms()` returns 0 when the bit rate is 0, and for the configurations the LR20xx driver cannot compute: 16-bit length header (`RAL_OOK_PKT_VAR_LEN_16_BITS`) and bi-phase mark encoding
+
+### Receive Status Flags (LR20xx)
+
+Every LR20xx interrupt is available through `RAL` (`ral_set_dio_irq_params()`, `ral_get_irq_status()`, `ral_get_and_clear_irq_status()`, `ral_clear_irq_status()`). Besides the usual flags, this includes:
+
+- `RAL_IRQ_RX_LEN_ERROR`: received packet longer than the configured payload length, reported with `RAL_IRQ_RX_DONE`
+- `RAL_IRQ_RX_ADDR_ERROR`: packet discarded because its address does not match
+- `RAL_IRQ_RTTOF_REQ_VALID`, `RAL_IRQ_RX_HDR_TIMESTAMP`, `RAL_IRQ_LOW_BATTERY`, `RAL_IRQ_PA_OVP_OCP`, `RAL_IRQ_LR_FHSS_NEW_TABLE` and `RAL_IRQ_LR_FHSS_NEW_PAYLOAD`
+
+`RAL_IRQ_ALL` clears every LR20xx interrupt, including `PA_OVP_OCP`, which the vendor mask `LR20XX_SYSTEM_IRQ_ALL_MASK` leaves out.
+
+The driver reports these flags; whether to use the hardware CRC and how to react to each flag is up to the application. `RAC` (radio planner) judges a reception from `RX_DONE`, header error and CRC error only, and clears the interrupts after reading them, so applications that need the other flags use `RAL` directly.
+
+Recommendations:
+
+- **One packet per `RX_DONE`** (single LoRa, GFSK, FLRC or OOK packets): enable the hardware CRC, and treat `RX_DONE` together with `RAL_IRQ_RX_CRC_ERROR` or `RAL_IRQ_RX_LEN_ERROR` as a bad packet, as the LR20xx reference examples do.
+- **Continuous FLRC bursts**, where several packets can be waiting in the RX FIFO when the application wakes up: the interrupt flags of these packets add up, so they cannot tell which packet is bad. Read the FIFO by its level, rebuild the packets in software and check each one with an application CRC; the hardware CRC can then be turned off. [DoorCam-LR](https://github.com/lierda-iot/DoorCam-LR) works this way: see `flrc_packet_params()` and `handle_rx_packet()` in `main/radio_ping.cpp`.
+
+### Sleep Without Retention
+
+The component itself only uses `ral_set_sleep( radio, true )`, which keeps the radio configuration and the PRAM.
+
+After `ral_set_sleep( radio, false )` the radio loses its configuration and the PRAM. On wake-up, call `ral_init()` again (it loads and checks the PRAM, then restores clock, DIO, calibration and FIFO settings), then apply the radio configuration again (for example `ralf_setup_lora()` and `ral_set_dio_irq_params()`), as after power-up. No separate reset is needed: the HAL wakes the radio up on the first command.
+
+### Using the Source Code as a Local Component
+
+When this repository is used through `override_path` or `path` in `idf_component.yml`, or placed in the project `components/` directory, ESP-IDF takes the component name from the directory name. Application code refers to the component as `esp_lora_driver`, so the directory must be named `esp_lora_driver`, for example:
+
+```bash
+git clone https://github.com/lierda-iot/esp32_lora_driver.git esp_lora_driver
+```
+
+The project and the component also need to be on the same drive on Windows, as `override_path` is stored as a relative path.
 
 ## Recommended Usage Priority
 

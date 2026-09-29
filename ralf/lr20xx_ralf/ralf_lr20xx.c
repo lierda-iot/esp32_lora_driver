@@ -267,6 +267,72 @@ ral_status_t ralf_lr20xx_setup_flrc( const ralf_t* radio, const ralf_params_flrc
     return status;
 }
 
+ral_status_t ralf_lr20xx_setup_ook( const ralf_t* radio, const ralf_params_ook_t* params )
+{
+    ESP_LOGI( TAG, "setup OOK: rf=%" PRIu32 "Hz, power=%d dBm, br=%" PRIu32 " bps", params->rf_freq_in_hz,
+              params->output_pwr_in_dbm, params->mod_params.br_in_bps );
+
+    ral_status_t status = ral_set_pkt_type( &radio->ral, RAL_PKT_TYPE_OOK );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+    status = ral_set_rf_freq( &radio->ral, params->rf_freq_in_hz );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+    status = ral_set_tx_cfg( &radio->ral, params->output_pwr_in_dbm, params->rf_freq_in_hz );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+    // Packet parameters first, then modulation parameters and receiver detector
+    status = ral_set_ook_pkt_params( &radio->ral, &params->pkt_params );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+    status = ral_set_ook_mod_params( &radio->ral, &params->mod_params );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+    status = ral_set_ook_rx_detector( &radio->ral, &params->rx_detector );
+    if( status != RAL_STATUS_OK )
+    {
+        return status;
+    }
+    if( params->pkt_params.sync_word_len_in_bits != 0 )
+    {
+        status = ral_set_ook_sync_word( &radio->ral, params->sync_word, params->pkt_params.sync_word_len_in_bits,
+                                        params->sync_word_bit_order );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+    }
+    if( params->pkt_params.crc_type != RAL_OOK_CRC_OFF )
+    {
+        status = ral_set_ook_crc_params( &radio->ral, params->crc_seed, params->crc_polynomial );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+    }
+    if( params->pkt_params.address_filtering != RAL_OOK_ADDRESS_FILTERING_DISABLE )
+    {
+        status = ral_set_ook_pkt_address( &radio->ral, params->node_address, params->broadcast_address );
+        if( status != RAL_STATUS_OK )
+        {
+            return status;
+        }
+    }
+    // A polynomial equal to 0 disables the whitening
+    return ral_set_ook_whitening_params( &radio->ral, params->whitening_bit_index, params->whitening_polynomial,
+                                         params->whitening_seed );
+}
+
 ral_status_t ralf_lr20xx_setup_lora_cad( const ralf_t* radio, const ralf_params_lora_cad_t* params )
 {
     ESP_LOGI( TAG, "setup LoRa CAD: rf=%" PRIu32 "Hz, sf=%d, bw=%d", params->rf_freq_in_hz, params->sf, params->bw );

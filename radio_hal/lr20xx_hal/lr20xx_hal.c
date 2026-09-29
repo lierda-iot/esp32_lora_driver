@@ -45,6 +45,7 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_rom_sys.h"
+#include "esp_attr.h"
 #include "freertos/FreeRTOS.h"
 
 /*
@@ -66,6 +67,11 @@
  * --- PRIVATE CONSTANTS -------------------------------------------------------
  */
 
+/**
+ * @brief Largest SPI transaction: a 2-byte FIFO command followed by a full 1024-byte FIFO
+ */
+#define LR20XX_HAL_SPI_MAX_TRANSFER_SIZE ( 2 + 1024 )
+
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE TYPES -----------------------------------------------------------
@@ -83,6 +89,15 @@ typedef enum
  */
 static volatile radio_mode_t radio_mode = RADIO_AWAKE;
 static spi_device_handle_t radio_spi = NULL;
+static bool radio_gpio_inited = false;
+
+/*
+ * SPI transfer buffers shared by the HAL functions, which keep arrays of up to 1026 bytes off the caller stack.
+ * The HAL drives one radio and has no lock: the callers must serialise the radio accesses (the radio planner or an
+ * application lock does). Concurrent calls would also interleave the NSS toggles, which are driven by software.
+ */
+static DMA_ATTR uint8_t radio_spi_tx_buf[LR20XX_HAL_SPI_MAX_TRANSFER_SIZE];
+static DMA_ATTR uint8_t radio_spi_rx_buf[LR20XX_HAL_SPI_MAX_TRANSFER_SIZE];
 
 /*
  * -----------------------------------------------------------------------------
@@ -121,10 +136,21 @@ lr20xx_hal_status_t lr20xx_hal_init( const void* radio )
 
 lr20xx_hal_status_t lr20xx_hal_reset( const void* radio )
 {
+    // The reset can come before lr20xx_hal_init: configure NRST first so that the pulse reaches the radio
+    radio_gpio_init( );
+
+#if RADIO_NRST >= 0
     gpio_set_level( RADIO_NRST, 0 );
-    // wait for 1ms
-    vTaskDelay(pdMS_TO_TICKS(1));
+    // Hold NRST low for 1 ms. A tick-based delay could be shorter, or zero with a 100 Hz tick.
+    esp_rom_delay_us( 1000 );
     gpio_set_level( RADIO_NRST, 1 );
+
+    // The radio restarts awake
+    radio_mode = RADIO_AWAKE;
+#else
+    // NRST is not connected, so the radio cannot be reset. It may be asleep: wake it up before the next command.
+    radio_mode = RADIO_SLEEP;
+#endif
 
     return LR20XX_HAL_STATUS_OK;
 }
@@ -143,6 +169,12 @@ lr20xx_hal_status_t lr20xx_hal_wakeup( const void* radio )
 lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_read( const void* radio, const uint8_t* cbuffer, const uint16_t cbuffer_length,
                                      uint8_t* rbuffer, const uint16_t rbuffer_length )
 {
+    if( ( cbuffer_length > LR20XX_HAL_SPI_MAX_TRANSFER_SIZE ) ||
+        ( ( uint32_t ) rbuffer_length + 2 > LR20XX_HAL_SPI_MAX_TRANSFER_SIZE ) )
+    {
+        return LR20XX_HAL_STATUS_ERROR;
+    }
+
     lr20xx_hal_check_device_ready( );
 
     // Put NSS low to start spi transaction
@@ -162,15 +194,13 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_read( const void* radio, const uint8_t*
         lr20xx_hal_wait_on_busy( );
         gpio_set_level( RADIO_NSS, 0 );
 
-        uint8_t dummy[2 + rbuffer_length];
-        uint8_t rxbuf[2 + rbuffer_length];
-        memset(dummy, 0x00, sizeof(dummy));
+        memset( radio_spi_tx_buf, 0x00, 2 + rbuffer_length );
 
         spi_transaction_t r_cmd = {
             .flags = 0,
             .length    = (rbuffer_length + 2) * 8,
-            .tx_buffer = dummy,
-            .rx_buffer = rxbuf,
+            .tx_buffer = radio_spi_tx_buf,
+            .rx_buffer = radio_spi_rx_buf,
         };
 
         spi_device_polling_transmit(radio_spi, &r_cmd);
@@ -178,7 +208,7 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_read( const void* radio, const uint8_t*
         // Put NSS high as the spi transaction is finished
         gpio_set_level( RADIO_NSS, 1 );
         
-        memcpy(rbuffer, &rxbuf[2], rbuffer_length);
+        memcpy(rbuffer, &radio_spi_rx_buf[2], rbuffer_length);
     }
 
     return LR20XX_HAL_STATUS_OK;
@@ -187,22 +217,24 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_read( const void* radio, const uint8_t*
 lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_write( const void* radio, const uint8_t* cbuffer, const uint16_t cbuffer_length,
                                       const uint8_t* cdata, const uint16_t cdata_length )
 {
-    uint16_t total_len = cbuffer_length + cdata_length;
+    uint32_t total_len = ( uint32_t ) cbuffer_length + cdata_length;
     if( total_len == 0 )
     {
         return LR20XX_HAL_STATUS_OK;
     }
+    if( total_len > LR20XX_HAL_SPI_MAX_TRANSFER_SIZE )
+    {
+        return LR20XX_HAL_STATUS_ERROR;
+    }
 
     /* Build a contiguous TX buffer: command + data */
-    uint8_t tx_buf[total_len];
-
-    memcpy( tx_buf, cbuffer, cbuffer_length );
-    memcpy( tx_buf + cbuffer_length, cdata, cdata_length );
+    memcpy( radio_spi_tx_buf, cbuffer, cbuffer_length );
+    memcpy( radio_spi_tx_buf + cbuffer_length, cdata, cdata_length );
 
     spi_transaction_t t = {
         .flags = 0,
         .length    = total_len * 8,
-        .tx_buffer = tx_buf,
+        .tx_buffer = radio_spi_tx_buf,
     };
 
     lr20xx_hal_check_device_ready( );
@@ -235,13 +267,17 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_direct_read( const void* radio, uint8_t
         return LR20XX_HAL_STATUS_OK;
     }
 
-    uint8_t dummy[data_length];
-    memset(dummy, 0x00, sizeof(dummy));
+    if( data_length > LR20XX_HAL_SPI_MAX_TRANSFER_SIZE )
+    {
+        return LR20XX_HAL_STATUS_ERROR;
+    }
+
+    memset( radio_spi_tx_buf, 0x00, data_length );
 
     spi_transaction_t t = {
         .flags = 0,
         .length    = data_length * 8,  /* Number of generated SPI clock cycles */
-        .tx_buffer = dummy,
+        .tx_buffer = radio_spi_tx_buf,
         .rx_buffer = data,             /* MISO data destination */
     };
 
@@ -268,18 +304,20 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_direct_read_fifo( const void* radio, co
                                                  const uint16_t data_length )
 {
     /* Build TX buffer: command + dummy bytes (0x00) */
-    uint16_t total_len = command_length + data_length;
-    uint8_t tx_buf[total_len];
-    uint8_t rx_buf[total_len];
+    uint32_t total_len = ( uint32_t ) command_length + data_length;
+    if( total_len > LR20XX_HAL_SPI_MAX_TRANSFER_SIZE )
+    {
+        return LR20XX_HAL_STATUS_ERROR;
+    }
 
-    memcpy( tx_buf, command, command_length );
-    memset( tx_buf + command_length, 0x00, data_length );
+    memcpy( radio_spi_tx_buf, command, command_length );
+    memset( radio_spi_tx_buf + command_length, 0x00, data_length );
 
     spi_transaction_t t = {
         .flags = 0,
         .length    = total_len * 8,     /* Total number of clock cycles */
-        .tx_buffer = tx_buf,
-        .rx_buffer = rx_buf,
+        .tx_buffer = radio_spi_tx_buf,
+        .rx_buffer = radio_spi_rx_buf,
     };
 
     lr20xx_hal_check_device_ready( );
@@ -292,7 +330,7 @@ lr20xx_hal_status_t IRAM_ATTR lr20xx_hal_direct_read_fifo( const void* radio, co
     // Put NSS high as the spi transaction is finished
     gpio_set_level( RADIO_NSS, 1 );
 
-    memcpy(data, &rx_buf[2], data_length);
+    memcpy( data, &radio_spi_rx_buf[command_length], data_length );
 
     if( err != ESP_OK )
     {
@@ -335,9 +373,15 @@ static void IRAM_ATTR lr20xx_hal_check_device_ready( void )
 
 static void radio_gpio_init(void)
 {
+    if( radio_gpio_inited == true )
+    {
+        return;
+    }
+
     gpio_config_t io_conf = { 0 };
 
-    /* ---------- NRST ---------- */
+    /* ---------- NRST (-1 when not connected) ---------- */
+#if RADIO_NRST >= 0
     io_conf.pin_bit_mask = 1ULL << RADIO_NRST;
     io_conf.mode         = GPIO_MODE_OUTPUT;
     io_conf.pull_up_en   = GPIO_PULLUP_DISABLE;
@@ -347,6 +391,7 @@ static void radio_gpio_init(void)
 
     /* Default high level to avoid unintended reset during power-up */
     gpio_set_level(RADIO_NRST, 1);
+#endif
 
     /* ---------- NSS (CS) ---------- */
     io_conf.pin_bit_mask = 1ULL << RADIO_NSS;
@@ -363,6 +408,8 @@ static void radio_gpio_init(void)
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.intr_type    = GPIO_INTR_DISABLE;
     gpio_config(&io_conf);
+
+    radio_gpio_inited = true;
 }
 
 static bool sRadioSpiBusInited = false;
@@ -379,7 +426,7 @@ static void radio_spi_bus_init(void)
         .sclk_io_num     = PIN_NUM_CLK,
         .quadwp_io_num   = -1,
         .quadhd_io_num   = -1,
-        .max_transfer_sz = 1024,
+        .max_transfer_sz = LR20XX_HAL_SPI_MAX_TRANSFER_SIZE,
     };
 
     esp_err_t ret = spi_bus_initialize(RADIO_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
