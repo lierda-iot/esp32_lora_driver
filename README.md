@@ -1,10 +1,12 @@
 # ESP LoRa Driver
 
-[中文文档](README.zh-CN.md)
+Language: [中文](README_CN.md) | English
 
 Repository: <https://github.com/lierda-iot/esp32_lora_driver.git>
 
 `ESP LoRa Driver` is an ESP-IDF component for Semtech LoRa radio chips. The current primary target is `LR20xx / LR2021`. The component exposes layered `RAC`, `RALF`, and `RAL` interfaces, and is intended to expand to `SX126x`, `LR11xx`, and other chip families later.
+
+**High-speed FLRC**: with this driver, `LR2021` sends and receives FLRC at a raw bit rate of 2.6 Mbit/s (`RAL_FLRC_RAW_BIT_RATE_2_600_MBPS`). Without coding (`RAL_FLRC_CR_1_1`, which is `LR20XX_RADIO_FLRC_CR_NONE` in the chip driver), the measured application payload rate is close to 2.2 Mbit/s, not counting protocol overhead such as retransmissions and gaps between packets.
 
 This component is based on Semtech's upstream `smtc_rac_lib`, then adapted, trimmed, and ported to the ESP-IDF environment. It keeps the upstream layered abstraction while adding ESP-specific HAL, GPIO, SPI, timer, and logging adaptation.
 
@@ -390,10 +392,10 @@ Application example:
 
 ## Documentation Links
 
-Additional component documents:
+Lierda product documents (public DingTalk knowledge base, in Chinese):
 
-- [DingTalk Doc](https://alidocs.dingtalk.com/i/nodes/dxXB52LJqnGE6GN4cQRNK0PX8qjMp697?utm_scene=team_space)
-- [DingTalk Doc](https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX32N52zwuAREozYpWMwvDqPk?utm_scene=team_space)
+- [L-LRMAM36-FANN4 (AM36)](https://alidocs.dingtalk.com/i/nodes/dxXB52LJqnGE6GN4cQRNK0PX8qjMp697?utm_scene=team_space)
+- [L-LRMWP35-FANN4 (WP35)](https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX32N52zwuAREozYpWMwvDqPk?utm_scene=team_space)
 
 ## Quick Start
 
@@ -401,7 +403,13 @@ Recommended minimal integration flow:
 
 ### 1. Add the Component to Your Project
 
-Add this component to your ESP-IDF project as a local component and make sure the build system can find it.
+Add the component from the [ESP Component Registry](https://components.espressif.com/components/lierda-iot/esp_lora_driver):
+
+```bash
+idf.py add-dependency "lierda-iot/esp_lora_driver^1.0.0"
+```
+
+To use the source code directly instead, see [Using the Source Code as a Local Component](#using-the-source-code-as-a-local-component).
 
 ### 2. Configure Target Chip and Hardware Parameters
 
@@ -438,8 +446,6 @@ You can directly use interfaces from these layers through the single entry heade
 ```bash
 idf.py build
 ```
-
-For the current `LR20XX / LR2021` path, the component has already passed a minimal build validation and is the main integration path at this stage.
 
 ## Usage Notes
 
@@ -549,11 +555,11 @@ Benefits:
 
 ## Version
 
-Current `RAC API` version is defined in [smtc_rac_version.h](rac_api/smtc_rac_version.h#L1):
+Current `RAC API` version is defined in [smtc_rac_version.h](rac_api/smtc_rac_version.h#L61):
 
 - Major: `1`
-- Minor: `0`
-- Patch: `0`
+- Minor: `1`
+- Patch: `2`
 
 ## License
 
@@ -568,24 +574,85 @@ When distributing source or binaries, keep the upstream copyright notice, licens
 
 ## Release Notes
 
-If you plan to publish this component to ESP Component Registry later, verify at least the following first:
+### 1.0.0
 
-- update the `url` field in [idf_component.yml](idf_component.yml)
-- add sample project links
-- perform at least one build validation for the target chip configuration
-- confirm that all public headers are truly stable external interfaces
+This release contains all changes made after 0.0.5.
 
-Current validation status:
+Upstream sync:
 
-- `L-LRMAM36-FANN4` has passed minimal ESP-IDF project build validation
-- `L-LRMWP35-FANN4` is in functional verification, and performance tuning is still pending
-- `SX126X` / `LR11XX` branches should still be considered unverified
+- Semtech `RAC API` 1.0.0 → 1.1.2, LR20xx driver v1.3.4 → v2.0.2 (with PRAM loading), LR11xx driver v2.7.0 → v3.0.0.
 
-Notes:
+API changes that need code updates when upgrading from 0.0.5:
 
-- in the current review round, the minimal project was actually built for the `L-LRMAM36-FANN4` path
-- `L-LRMWP35-FANN4` has been split into an independent BSP and connected through the basic functional path, but board-level performance parameters still need follow-up refinement
-- independent branch build confirmation has not yet been completed for `SX126X` / `LR11XX`, so they should not be claimed as fully validated in a release by default
+- FLRC modulation: `br_in_bps` and `bw_dsb_in_hz` in `ral_flrc_mod_params_t` are replaced by `raw_bit_rate` (`RAL_FLRC_RAW_BIT_RATE_0_260_MBPS` to `RAL_FLRC_RAW_BIT_RATE_2_600_MBPS`).
+- FLRC preamble: `preamble_len_in_bits` in `ral_flrc_pkt_params_t` is replaced by `preamble_len` (`RAL_FLRC_PREAMBLE_LENGTH_4_BITS` to `RAL_FLRC_PREAMBLE_LENGTH_32_BITS`). For a longer preamble (36 to 16380 bits, multiple of 4), set `RAL_FLRC_PREAMBLE_LENGTH_32_BITS`, then call `ral_set_flrc_long_preamble_len_in_bits()`. This replaces the automatic handling added in 0.0.5.
+- FLRC sync words: `sync_word` in `ralf_params_flrc_t` and in the `RAC` FLRC parameters is now an array of three pointers, one per sync word.
+- LoRa: `symb_nb_timeout` in `ralf_params_lora_t` and in the `RAC` LoRa parameters is now `uint16_t`.
+
+New in `RAC`:
+
+- FLRC burst transfer: `smtc_rac_flrc_burst()`, `smtc_rac_flrc_burst_rx_done()` and `smtc_rac_radio_flrc_burst_params_t`.
+- Immediate radio access: `smtc_rac_immediate_radio_access()` and `smtc_rac_release_immediate_radio_access()`.
+- Active time-out: `smtc_rac_set_active_time_out()` and `smtc_rac_release_active_time_out()`.
+- `smtc_rac_get_callback_radio_id()`, `smtc_rac_get_context_private()`, `smtc_rac_set_context_private()`, and `keep_radio_awake` in `smtc_rac_context_t`.
+
+New in `RAL` and `RALF`:
+
+- OOK on LR20xx: 9 `RAL` functions (parameters, detector, sync word, CRC, address, whitening, packet status, time on air) and `ralf_setup_ook()`.
+- FIFO access: `ral_get_pkt_size()`, `ral_get_data_rx_buffer()`, `ral_clear_rx_fifo()`, `ral_clear_tx_fifo()`, `ral_get_fifo_irq()` and `ral_get_and_clear_fifo_irq()`.
+- GFSK: `ral_set_gfsk_whitening_seed_comp()`, and the CRC types `RAL_GFSK_CRC_3_BYTES_INV`, `RAL_GFSK_CRC_4_BYTES` and `RAL_GFSK_CRC_4_BYTES_INV`.
+- LoRa: bandwidths `RAL_LORA_BW_083_KHZ` and `RAL_LORA_BW_101_KHZ` on LR20xx, and `freq_offset_hz` in `ral_lora_rx_pkt_status_t`.
+- FLRC: `crc_seed` is applied on LR20xx, and `ralf_params_flrc_t` has an `is_tx` field.
+- IRQs: RAL flags cover all 28 LR20xx interrupt bits. New flags: `RAL_IRQ_RX_LEN_ERROR`, `RAL_IRQ_RX_ADDR_ERROR`, `RAL_IRQ_CMD_ERROR`, `RAL_IRQ_ERROR`, `RAL_IRQ_RTTOF_REQ_VALID`, `RAL_IRQ_RX_HDR_TIMESTAMP`, `RAL_IRQ_LOW_BATTERY`, `RAL_IRQ_PA_OVP_OCP`, `RAL_IRQ_LR_FHSS_NEW_TABLE` and `RAL_IRQ_LR_FHSS_NEW_PAYLOAD`.
+
+Initialization and calibration:
+
+- Initialization checks the `lr20xx_system_init()` result and verifies the PRAM, enters standby XOSC after the crystal configuration, runs system calibration when a TCXO is used, and clears pending IRQs before configuring the DIOs. The front-end calibration frequencies at initialization are 470, 897.5 and 2441 MHz.
+- On a frequency change, PLL/AAF are recalibrated when the frequency moves by more than 50 MHz, front-end calibration runs when it moves by more than 10 MHz, and the RX path and boost are set last.
+
+Fixes:
+
+- `ral_reset()` configures the NRST pin before the first reset pulse, and the reset low time is exactly 1 ms.
+- A single SPI transfer can carry a full FIFO (2-byte command plus 1024 bytes): the limit is 1026 bytes, the length is checked on entry, a failed write reports an error, a static DMA buffer is used, and the FIFO read offset follows the actual command length.
+- `LR2021_NRST_GPIO = -1` (not connected) no longer evaluates `1ULL << -1`.
+- During initialization, the system error read is checked and its variable is initialized.
+- `ral_cal_img()` uses the HF receive path for 2.4 GHz frequencies.
+- Log format specifiers for 32-bit values.
+
+Hardware and configuration:
+
+- `L-LRMAM36-FANN4` and `L-LRMWP35-FANN4`: the crystal trims XTA and XTB are 11 (were 0), which enables the internal load capacitors.
+- The PA and RX path switch from the LF to the HF path at 1.5 GHz (was 1.6 GHz).
+- The NSS wake-up pulse is 100 µs (was 1 ms).
+- `menuconfig`: LR20xx chip model (`LR2012`, `LR2021`, `LR2022`); SX126x chip model (`SX1261`, `SX1262`, `SX1268`) with BPSK (default off) and LR-FHSS (default on) options; LR11xx CRC over SPI and geolocation options; radio planner margin delay (default 8 ms) and region duty-cycle profile (none, EU 868, RU 864). The logging profiles also set `RAC_LOG_ENABLE`.
+
+Documentation and packaging:
+
+- The Chinese README is now `README_CN.md`, so the registry page shows a language switch.
+- README: registry installation command, FLRC data rates, OOK usage, receive status flag guidance with DoorCam-LR as a reference, `LR2021_NRST_GPIO = -1`, sleep without retention, and using the source code as a local component.
+- Registry tags `flrc`, `semtech` and `esp32-s3` added; `lr20xx` and `esp-idf` removed.
+- The unused `ral/base64.c` and `ral/base64.h` are removed.
+- `LICENSE` adds the Lierda copyright line for the ESP-IDF adaptation.
+
+### 0.0.5
+
+- FLRC preambles longer than 32 bits on LR20xx, up to 16380 bits in steps of 4 bits, through `preamble_len_in_bits` in `ral_flrc_pkt_params_t`.
+
+### 0.0.4
+
+- English README by default, with a link to the Chinese README (`README.zh-CN.md`). `README.en.md` removed.
+
+### 0.0.3
+
+- English README added (`README.en.md`); the Chinese README is also available as `README.zh-CN.md`.
+- Chinese comments in `modem_hal` and `lr20xx_hal` translated to English (comments only).
+
+### 0.0.2
+
+- First release: ESP-IDF component based on Semtech `smtc_rac_lib`, with `RAC API`, `RAC` with the radio planner, `RALF`, `RAL`, and the LR20xx, LR11xx and SX126x drivers.
+- ESP-IDF HAL for SPI, GPIO, timers and logging, and the single entry header `LiotLr2021.h`.
+- `menuconfig` options for the radio family, the board (`L-LRMAM36-FANN4` or `L-LRMWP35-FANN4`), SPI, GPIO and logging profiles.
+- `LICENSE` and `NOTICE` (The Clear BSD License).
 
 ## Maintenance Notes
 

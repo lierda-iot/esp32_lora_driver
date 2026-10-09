@@ -12,9 +12,10 @@ repository: https://github.com/lierda-iot/esp32_lora_driver.git
 tags:
 - lora
 - lr2021
-- lr20xx
 - radio
-- esp-idf
 - lierda
+- flrc
+- semtech
+- esp32-s3
 url: https://github.com/lierda-iot/esp32_lora_driver.git
-version: 0.0.7
+version: 1.0.0

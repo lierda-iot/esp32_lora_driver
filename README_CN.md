@@ -1,10 +1,12 @@
 # ESP LoRa Driver
 
-[English](README.md)
+语言：中文 | [English](README.md)
 
 仓库地址：<https://github.com/lierda-iot/esp32_lora_driver.git>
 
 `ESP LoRa Driver` 是一个面向 Semtech LoRa 无线芯片的 ESP-IDF 组件库，当前以 `LR20xx/LR2021` 为主要目标，集成了 ESP 平台适配，并对外公开 `RAC`、`RALF` 和 `RAL` 分层接口，后续将继续支持 `SX126x`、`LR11xx` 等芯片型号。
+
+**FLRC 高速收发**：使用本驱动，`LR2021` 的 FLRC 空口速率可达 2.6 Mbit/s（`RAL_FLRC_RAW_BIT_RATE_2_600_MBPS`）。不编码时（`RAL_FLRC_CR_1_1`，即芯片驱动的 `LR20XX_RADIO_FLRC_CR_NONE`），应用层有效数据实测接近 2.2 Mbit/s，重传、包间隔等协议开销不计在内。
 
 该组件基于 Semtech 上游 `smtc_rac_lib` 修改、裁剪并移植到 ESP-IDF 环境，保留了上游的分层抽象方式，并增加了适用于 ESP 平台的 HAL、GPIO、SPI、定时器和日志适配。
 
@@ -395,10 +397,10 @@ void app_main(void)
 
 ## 文档链接
 
-如需查看该组件的补充说明文档，请参考以下链接：
+利尔达产品资料（钉钉知识库，公开访问）：
 
-- [钉钉文档](https://alidocs.dingtalk.com/i/nodes/dxXB52LJqnGE6GN4cQRNK0PX8qjMp697?utm_scene=team_space)
-- [钉钉文档](https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX32N52zwuAREozYpWMwvDqPk?utm_scene=team_space)
+- [L-LRMAM36-FANN4（AM36）](https://alidocs.dingtalk.com/i/nodes/dxXB52LJqnGE6GN4cQRNK0PX8qjMp697?utm_scene=team_space)
+- [L-LRMWP35-FANN4（WP35）](https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX32N52zwuAREozYpWMwvDqPk?utm_scene=team_space)
 
 ## 快速开始
 
@@ -406,7 +408,13 @@ void app_main(void)
 
 ### 1. 将组件加入工程
 
-将当前组件作为本地组件加入 ESP-IDF 工程，并确保工程可以在构建系统中找到它。
+从 [ESP 组件注册表](https://components.espressif.com/components/lierda-iot/esp_lora_driver) 添加组件：
+
+```bash
+idf.py add-dependency "lierda-iot/esp_lora_driver^1.0.0"
+```
+
+如果要直接使用源码，见下文“以源码形式作为本地组件使用”。
 
 ### 2. 配置目标芯片和硬件参数
 
@@ -443,8 +451,6 @@ idf.py menuconfig
 ```bash
 idf.py build
 ```
-
-如果当前目标是 `LR20XX / LR2021` 路径，组件已经完成过最小工程构建验证，可作为当前主要集成路径使用。
 
 ## 使用注意事项
 
@@ -554,11 +560,11 @@ git clone https://github.com/lierda-iot/esp32_lora_driver.git esp_lora_driver
 
 ## 版本信息
 
-当前 `RAC API` 版本定义见 [smtc_rac_version.h](rac_api/smtc_rac_version.h#L1)：
+当前 `RAC API` 版本定义见 [smtc_rac_version.h](rac_api/smtc_rac_version.h#L61)：
 
 - Major: `1`
-- Minor: `0`
-- Patch: `0`
+- Minor: `1`
+- Patch: `2`
 
 ## 许可证说明
 
@@ -573,24 +579,85 @@ git clone https://github.com/lierda-iot/esp32_lora_driver.git esp_lora_driver
 
 ## 发布说明
 
-如果后续要将该组件发布到 ESP Component Registry，建议在发布前再确认以下事项：
+### 1.0.0
 
-- 更新 [idf_component.yml](idf_component.yml) 中的 `url`
-- 补充使用例程链接
-- 进行至少一次目标芯片配置下的编译验证
-- 检查所有公开头文件是否确实属于稳定外部接口
+本版本包含 0.0.5 之后的全部改动。
 
-当前验证状态：
+同步上游：
 
-- `L-LRMAM36-FANN4` 已完成最小 ESP-IDF 工程构建验证
-- `L-LRMWP35-FANN4` 当前处于功能验证阶段，性能参数尚未完成调优
-- `SX126X` / `LR11XX` 分支当前仍视为“未完成验证”
+- Semtech `RAC API` 1.0.0 → 1.1.2，LR20xx 驱动 v1.3.4 → v2.0.2（含 PRAM 加载），LR11xx 驱动 v2.7.0 → v3.0.0。
 
-说明：
+从 0.0.5 升级时需要改代码的接口变化：
 
-- 本轮审查中，最小工程已实际完成 `L-LRMAM36-FANN4` 对应路径编译
-- `L-LRMWP35-FANN4` 已拆分为独立 BSP，并完成基础功能路径接入，但板级性能参数仍需后续细化
-- 对 `SX126X` / `LR11XX` 的条件分支尚未完成独立有效的分支构建确认，因此发布时不应默认宣称这两个分支已验证可用
+- FLRC 调制参数：`ral_flrc_mod_params_t` 的 `br_in_bps` 和 `bw_dsb_in_hz` 改为 `raw_bit_rate`（`RAL_FLRC_RAW_BIT_RATE_0_260_MBPS` 到 `RAL_FLRC_RAW_BIT_RATE_2_600_MBPS`）。
+- FLRC 前导码：`ral_flrc_pkt_params_t` 的 `preamble_len_in_bits` 改为 `preamble_len`（`RAL_FLRC_PREAMBLE_LENGTH_4_BITS` 到 `RAL_FLRC_PREAMBLE_LENGTH_32_BITS`）。需要更长的前导码（36 到 16380 位，4 的倍数）时，先设为 `RAL_FLRC_PREAMBLE_LENGTH_32_BITS`，再调用 `ral_set_flrc_long_preamble_len_in_bits()`。这取代了 0.0.5 的自动处理。
+- FLRC 同步字：`ralf_params_flrc_t` 和 `RAC` FLRC 参数里的 `sync_word` 改为 3 个指针的数组，每个同步字一个。
+- LoRa：`ralf_params_lora_t` 和 `RAC` LoRa 参数里的 `symb_nb_timeout` 改为 `uint16_t`。
+
+`RAC` 新增：
+
+- FLRC 连续收发：`smtc_rac_flrc_burst()`、`smtc_rac_flrc_burst_rx_done()` 和 `smtc_rac_radio_flrc_burst_params_t`。
+- 立即占用射频：`smtc_rac_immediate_radio_access()` 和 `smtc_rac_release_immediate_radio_access()`。
+- 活动超时：`smtc_rac_set_active_time_out()` 和 `smtc_rac_release_active_time_out()`。
+- `smtc_rac_get_callback_radio_id()`、`smtc_rac_get_context_private()`、`smtc_rac_set_context_private()`，以及 `smtc_rac_context_t` 的 `keep_radio_awake`。
+
+`RAL` 和 `RALF` 新增：
+
+- LR20xx 的 OOK：`RAL` 的 9 个接口（参数、检测器、同步字、CRC、地址、白化、包状态、空中时间）和 `ralf_setup_ook()`。
+- FIFO 访问：`ral_get_pkt_size()`、`ral_get_data_rx_buffer()`、`ral_clear_rx_fifo()`、`ral_clear_tx_fifo()`、`ral_get_fifo_irq()` 和 `ral_get_and_clear_fifo_irq()`。
+- GFSK：`ral_set_gfsk_whitening_seed_comp()`，以及 CRC 类型 `RAL_GFSK_CRC_3_BYTES_INV`、`RAL_GFSK_CRC_4_BYTES` 和 `RAL_GFSK_CRC_4_BYTES_INV`。
+- LoRa：LR20xx 的带宽 `RAL_LORA_BW_083_KHZ` 和 `RAL_LORA_BW_101_KHZ`，`ral_lora_rx_pkt_status_t` 的 `freq_offset_hz`。
+- FLRC：LR20xx 上 `crc_seed` 生效，`ralf_params_flrc_t` 增加 `is_tx`。
+- 中断：RAL 标志覆盖 LR20xx 全部 28 个中断位。新增 `RAL_IRQ_RX_LEN_ERROR`、`RAL_IRQ_RX_ADDR_ERROR`、`RAL_IRQ_CMD_ERROR`、`RAL_IRQ_ERROR`、`RAL_IRQ_RTTOF_REQ_VALID`、`RAL_IRQ_RX_HDR_TIMESTAMP`、`RAL_IRQ_LOW_BATTERY`、`RAL_IRQ_PA_OVP_OCP`、`RAL_IRQ_LR_FHSS_NEW_TABLE` 和 `RAL_IRQ_LR_FHSS_NEW_PAYLOAD`。
+
+初始化与校准：
+
+- 初始化检查 `lr20xx_system_init()` 的返回值并校验 PRAM；晶振配置后进入 standby XOSC；使用 TCXO 时执行系统校准；配置 DIO 前清除旧的 IRQ。初始化时的前端校准频点为 470、897.5、2441 MHz。
+- 切换频点时，变化超过 50 MHz 重新校准 PLL/AAF，超过 10 MHz 做前端校准，最后设置 RX path 和 boost。
+
+修复：
+
+- `ral_reset()` 在第一次复位脉冲前配置 NRST 引脚，复位低电平为精确 1 ms。
+- SPI 单次传输可以读写满 FIFO（2 字节命令加 1024 字节）：上限 1026 字节，入口检查长度，写入失败时返回错误，使用静态 DMA 缓冲，FIFO 读取偏移按实际命令长度计算。
+- `LR2021_NRST_GPIO` 设为 `-1`（未连接）时不再执行 `1ULL << -1`。
+- 初始化读取系统错误时检查返回值，错误码变量已初始化。
+- `ral_cal_img()` 对 2.4 GHz 频点使用 HF 接收路径。
+- 32 位数值的日志格式符。
+
+硬件与配置：
+
+- `L-LRMAM36-FANN4` 和 `L-LRMWP35-FANN4`：晶振微调 XTA、XTB 设为 11（原为 0），启用芯片内部负载电容。
+- PA 和 RX 路径在 1.5 GHz 从 LF 切到 HF（原为 1.6 GHz）。
+- NSS 唤醒脉冲为 100 µs（原为 1 ms）。
+- `menuconfig`：LR20xx 芯片型号（`LR2012`、`LR2021`、`LR2022`）；SX126x 芯片型号（`SX1261`、`SX1262`、`SX1268`）及 BPSK（默认关）、LR-FHSS（默认开）选项；LR11xx 的 SPI CRC 和地理定位选项；Radio Planner 余量延时（默认 8 ms）和地区占空比配置（不启用、EU 868、RU 864）。日志档位同时设置 `RAC_LOG_ENABLE`。
+
+文档与打包：
+
+- 中文 README 改名为 `README_CN.md`，注册表页面显示语言切换。
+- README：注册表安装命令、FLRC 速率、OOK 用法、接收状态标志的使用建议（参考 DoorCam-LR）、`LR2021_NRST_GPIO = -1`、不保留 RAM 的睡眠，以及以源码形式作为本地组件使用。
+- 注册表标签加 `flrc`、`semtech`、`esp32-s3`，去掉 `lr20xx`、`esp-idf`。
+- 删除未使用的 `ral/base64.c` 和 `ral/base64.h`。
+- `LICENSE` 增加利尔达对 ESP-IDF 适配部分的版权行。
+
+### 0.0.5
+
+- LR20xx 支持超过 32 位的 FLRC 前导码，最长 16380 位，步长 4 位，通过 `ral_flrc_pkt_params_t` 的 `preamble_len_in_bits` 设置。
+
+### 0.0.4
+
+- README 默认英文，并链接到中文 README（`README.zh-CN.md`）。删除 `README.en.md`。
+
+### 0.0.3
+
+- 增加英文 README（`README.en.md`）；中文 README 同时提供为 `README.zh-CN.md`。
+- `modem_hal` 和 `lr20xx_hal` 中的中文注释翻译为英文（只改注释）。
+
+### 0.0.2
+
+- 首个版本：基于 Semtech `smtc_rac_lib` 的 ESP-IDF 组件，包含 `RAC API`、带 Radio Planner 的 `RAC`、`RALF`、`RAL`，以及 LR20xx、LR11xx 和 SX126x 驱动。
+- ESP-IDF 的 SPI、GPIO、定时器和日志 HAL，以及单入口头文件 `LiotLr2021.h`。
+- `menuconfig` 中的射频芯片家族、板型（`L-LRMAM36-FANN4` 或 `L-LRMWP35-FANN4`）、SPI、GPIO 和日志档位选项。
+- `LICENSE` 和 `NOTICE`（The Clear BSD License）。
 
 ## 维护说明
 
